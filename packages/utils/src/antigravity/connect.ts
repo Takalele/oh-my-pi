@@ -106,12 +106,13 @@ export async function connectAntigravityAcp(options: {
 	client: (connection: ClientSideConnection) => Client;
 	harnessPath?: string | null;
 	/**
-	 * Receives raw stdout/stderr text that carries the sign-in prompt. The
-	 * server prints `Open the following link to authenticate the ACP server:
-	 * <url>` on stdout BEFORE any JSON-RPC flows (first `authenticate`), and
-	 * that same stdout is the ndJsonStream input — the prompt line would fail
+	 * Receives raw text that carries the sign-in prompt. Runtime 1.4.5 prints
+	 * `Open the following link to authenticate the ACP server: <url>` on
+	 * **stderr** during `authenticate`; older/alternate builds may put it on
+	 * stdout, which is the ndJsonStream input — the prompt line would fail
 	 * JSON.parse and tear down the connection, so stdout is tee'd: JSON-RPC
 	 * lines pass to the parser, every other line is handed here instead.
+	 * Both channels arrive here; the parser only ever sees stdout JSON.
 	 */
 	onAuthText?: (text: string) => void;
 }): Promise<AntigravityAcpConnection> {
@@ -144,7 +145,10 @@ export async function connectAntigravityAcp(options: {
 		for (;;) {
 			const { done, value } = await reader.read();
 			if (done) break;
-			stderrBuffer += decoder.decode(value, { stream: true });
+			const text = decoder.decode(value, { stream: true });
+			stderrBuffer += text;
+			// The official binary's sign-in link lands on stderr, not stdout.
+			options.onAuthText?.(text);
 			// Bound retention: keep the tail; auth markers appear early.
 			if (stderrBuffer.length > 256 * 1024) stderrBuffer = stderrBuffer.slice(-128 * 1024);
 		}
