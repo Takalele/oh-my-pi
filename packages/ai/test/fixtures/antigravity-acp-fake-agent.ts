@@ -149,13 +149,19 @@ async function main(): Promise<void> {
 					sessionId,
 					update: { sessionUpdate: "agent_thought_chunk", content: { type: "text", text: "plan first" } },
 				});
+				// Mirror the official runtime's tool frames (captured wire):
+				// kind + rawInput + diff content, then rawOutput on completion.
 				notify("session/update", {
 					sessionId,
 					update: {
 						sessionUpdate: "tool_call",
 						toolCallId: "tc-1",
-						title: "Edit src/a.ts",
-						status: "in_progress",
+						title: "Run create_file?",
+						kind: "edit",
+						status: "pending",
+						content: [{ type: "diff", path: "src/a.ts", newText: "console.log(1)\n" }],
+						locations: [{ path: "/tmp/src/a.ts" }],
+						rawInput: { TargetFile: "/tmp/src/a.ts", CodeContent: "console.log(1)\n" },
 					},
 				});
 				notify("session/update", {
@@ -163,8 +169,8 @@ async function main(): Promise<void> {
 					update: {
 						sessionUpdate: "tool_call_update",
 						toolCallId: "tc-1",
-						title: "Edit src/a.ts",
 						status: "completed",
+						rawOutput: "Created src/a.ts",
 					},
 				});
 				notify("session/update", {

@@ -5,7 +5,7 @@ import * as path from "node:path";
 import { buildModel } from "@oh-my-pi/pi-catalog/build";
 import { ANTIGRAVITY_ACP_PATH_ENV } from "@oh-my-pi/pi-utils/antigravity";
 import { streamAntigravityAcp } from "@oh-my-pi/pi-ai/providers/antigravity-acp";
-import type { Context, Model, ProviderSessionState } from "@oh-my-pi/pi-ai/types";
+import type { Context, Model, ProviderSessionState, ToolResultMessage } from "@oh-my-pi/pi-ai/types";
 
 const model: Model<"antigravity-acp"> = buildModel({
 	id: "gemini-3.7-flash-high",
@@ -57,37 +57,59 @@ function useFakeAgent(mode?: string): void {
 }
 
 describe("antigravity-acp provider", () => {
-	it("maps a fake ACP turn to thinking/text deltas and never emits toolCall blocks", async () => {
+	it("mirrors an agent tool call as a resolved toolCall block with a paired result", async () => {
 		useFakeAgent();
 		const sessions = new Map<string, ProviderSessionState>();
 		const events: string[] = [];
+		const results: ToolResultMessage[] = [];
 		const stream = streamAntigravityAcp(model, context, {
 			cwd: configDir,
 			sessionId: "omp-session-1",
 			providerSessionState: sessions,
+			cursorOnToolResult: result => {
+				results.push(result);
+				return result;
+			},
 		});
 		for await (const event of stream) events.push(event.type);
 		const result = await stream.result();
 
-		// Order: thought ("plan first") + tool activity summaries close BEFORE
-		// the text chunks arrive (direction A: agent tool calls are summaries).
+		// Direction B: the agent's own edit renders as a real tool card
+		// (toolcall_start/end between the thinking and text blocks), and its
+		// result pairs through cursorOnToolResult like Cursor's exec channel.
 		expect(events.slice(1, -1)).toEqual([
 			"thinking_start",
 			"thinking_delta",
-			"thinking_delta",
-			"thinking_delta",
 			"thinking_end",
+			"toolcall_start",
+			"toolcall_end",
 			"text_start",
 			"text_delta",
 			"text_delta",
 			"text_end",
 		]);
 		expect(result.stopReason).toBe("stop");
-		expect(result.content.map(block => block.type)).toEqual(["thinking", "text"]);
+		expect(result.content.map(block => block.type)).toEqual(["thinking", "toolCall", "text"]);
 		const thinking = result.content.find(block => block.type === "thinking");
-		const text = result.content.find(block => block.type === "text");
 		expect(thinking?.type === "thinking" && thinking.thinking).toContain("plan first");
-		expect(thinking?.type === "thinking" && thinking.thinking).toContain("[in_progress] Edit src/a.ts");
+		// The mirrored block maps ACP kind "edit" onto omp's `edit` card and
+		// carries the diff for the renderer.
+		const call = result.content.find(block => block.type === "toolCall");
+		expect(call?.type === "toolCall" && call.name).toBe("edit");
+		expect(call?.type === "toolCall" && call.arguments).toMatchObject({
+			path: "/tmp/src/a.ts",
+			newText: "console.log(1)\n",
+		});
+		// Paired result: exactly one, built from rawOutput, routed via the sink.
+		expect(results).toEqual([
+			expect.objectContaining({
+				toolCallId: "tc-1",
+				toolName: "edit",
+				isError: false,
+				content: [{ type: "text", text: "Created src/a.ts" }],
+			}),
+		]);
+		const text = result.content.find(block => block.type === "text");
 		expect(text?.type === "text" && text.text).toBe("Hello world");
 		// Usage from the PromptResponse; cost stays zero (plan subscription).
 		expect(result.usage).toMatchObject({

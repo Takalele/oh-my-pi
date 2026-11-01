@@ -7,10 +7,14 @@
  * credential handling on omp's side (the binary owns the Google sign-in).
  *
  * The agent runs its OWN tools (file edits, terminal) inside the session cwd.
- * Those tool calls are rendered as activity summaries, never as omp `toolCall`
- * blocks: the agent loop would otherwise execute them again against omp's tool
- * set (agent-loop.ts gates on toolCall blocks with stop reasons `stop`/
- * `toolUse`). Permission elicits are auto-answered `allow_once` because the
+ * Their `tool_call`/`tool_call_update` notifications become real `toolCall`
+ * content blocks stamped `kCursorExecResolved` — the same carrier Cursor's
+ * server-side exec channel uses — so the transcript and TUI render them as
+ * ordinary tool cards while `agent-loop.ts` skips execution (the binary
+ * already performed the side effect; running it again would double-apply it).
+ * The paired `toolResult` message is built from the update's `rawOutput` and
+ * routed through `onToolResult`, exactly like Cursor's exec results.
+ * Permission elicits are auto-answered `allow_once` because the
  * AI layer has no approval UI; the binary's own mode setting (default /
  * auto_edit / yolo) is the intended control surface.
  */
@@ -30,13 +34,18 @@ import type { Effort } from "@oh-my-pi/pi-catalog/effort";
 import type {
 	AssistantMessage,
 	Context,
+	CursorToolResultHandler,
 	Message,
 	Model,
 	ProviderSessionState,
 	StreamFunction,
 	StreamOptions,
 	TextContent,
+	ToolCall,
+	ToolResultMessage,
 } from "../types";
+import { kCursorExecResolved } from "../utils/block-symbols";
+import { INTENT_FIELD } from "@oh-my-pi/pi-wire";
 import { AssistantMessageEventStream } from "../utils/event-stream";
 
 export const ANTIGRAVITY_ACP_PROVIDER_ID = "antigravity";
@@ -55,6 +64,12 @@ export interface AntigravityAcpOptions extends StreamOptions {
 	 * once (see file header).
 	 */
 	permissionMode?: AntigravityPermissionMode;
+	/**
+	 * Pairs each mirrored toolCall block with its synthesized toolResult —
+	 * the same sink the Agent stamps on provider calls for server-executed
+	 * tools (`streamSimple` fills it from `SimpleStreamOptions.cursorOnToolResult`).
+	 */
+	cursorOnToolResult?: CursorToolResultHandler;
 }
 
 /** Cancel grace after the caller aborts: ACP cancel, then hard process kill. */
@@ -92,7 +107,13 @@ interface AntigravityAcpSession {
 
 interface AntigravityAcpTurn {
 	state: AntigravityAcpStreamState;
+	/** toolCallId → mirrored toolCall block awaiting completion/pairing. */
+	blocks: Map<string, TrackedToolBlock>;
+	/** Pairs each mirrored block with a synthesized toolResult (Cursor-exec path). */
+	onToolResult?: CursorToolResultHandler;
 	onUpdate(update: SessionUpdate): void;
+	/** Close + pair blocks left unfinished when the turn ends without their status. */
+	flushUnfinished(): void;
 }
 
 function antigravityAcpProviderSessionStateKey(cwd: string, sessionId: string | undefined): string {
@@ -207,7 +228,7 @@ async function runAntigravityAcpTurn(
 	await applySessionConfig(session, model, options);
 
 	const prompt = buildPromptBlocks(model, context, session);
-	const turn = createTurn(state, session);
+	const turn = createTurn(state, session, options);
 	session.activeTurn = turn;
 
 	const abort = options.signal;
@@ -228,13 +249,13 @@ async function runAntigravityAcpTurn(
 		});
 		applyUsage(state.output, response.usage, live.lastUsedTokens);
 		if (abort?.aborted) {
-			finishStream(state, live, "aborted");
+			finishStream(state, live, turn, "aborted");
 			return;
 		}
-		finishStream(state, live, mapStopReason(response.stopReason));
+		finishStream(state, live, turn, mapStopReason(response.stopReason));
 	} catch (error) {
 		if (abort?.aborted) {
-			finishStream(state, live, "aborted");
+			finishStream(state, live, turn, "aborted");
 			return;
 		}
 		// A dead transport mid-prompt means the process is gone; drop it so the
@@ -248,9 +269,16 @@ async function runAntigravityAcpTurn(
 	}
 }
 
-function createTurn(state: AntigravityAcpStreamState, session: AntigravityAcpSession): AntigravityAcpTurn {
-	return {
+function createTurn(
+	state: AntigravityAcpStreamState,
+	session: AntigravityAcpSession,
+	options: AntigravityAcpOptions,
+): AntigravityAcpTurn {
+	const byId = new Map<string, TrackedToolBlock>();
+	const turn: AntigravityAcpTurn = {
 		state,
+		blocks: byId,
+		onToolResult: options.cursorOnToolResult,
 		onUpdate(update) {
 			switch (update.sessionUpdate) {
 				case "agent_message_chunk":
@@ -261,10 +289,13 @@ function createTurn(state: AntigravityAcpStreamState, session: AntigravityAcpSes
 					return;
 				case "tool_call":
 				case "tool_call_update":
-					// Direction A: the agent executed this itself; render it as an
-					// activity line in the thinking lane. Never a toolCall block —
-					// the loop would re-execute it against omp tools.
-					emitThinking(state, formatToolActivity(update));
+					// Direction B: the binary already executed this tool in our
+					// cwd. Mirror it as a real toolCall block stamped
+					// `kCursorExecResolved` (the Cursor server-exec carrier) so
+					// the transcript/TUI render an ordinary tool card while
+					// `agent-loop` skips re-execution, and pair it with a
+					// toolResult built from `rawOutput`.
+					handleToolUpdate(turn, state, update);
 					return;
 				case "plan": {
 					const lines = update.entries.map(entry => `- [${entry.status}] ${entry.content}`).join("\n");
@@ -281,16 +312,227 @@ function createTurn(state: AntigravityAcpStreamState, session: AntigravityAcpSes
 					return;
 			}
 		},
+		flushUnfinished() {
+			for (const tracked of byId.values()) {
+				if (tracked.ended) continue;
+				endToolBlock(state, tracked);
+				void deliverToolResult(turn, tracked, "The turn ended before this call reported completion.", true);
+			}
+		},
 	};
+	return turn;
 }
 
-function formatToolActivity(
+/** A live toolCall block mirrored from ACP, pending its tool_result pairing. */
+interface TrackedToolBlock {
+	block: ToolCall & { [kCursorExecResolved]?: true };
+	contentIndex: number;
+	toolName: string;
+	ended: boolean;
+	paired: boolean;
+}
+
+/** ACP `kind` → omp built-in tool name, so the TUI picks the native renderer. */
+function mapToolName(kind: string | null | undefined, title: string | null | undefined): string {
+	switch (kind) {
+		case "edit":
+		case "delete":
+		case "move":
+			return "edit";
+		case "read":
+			return "read";
+		case "search":
+			return "grep";
+		case "execute":
+			return "bash";
+		case "fetch":
+			return "web_search";
+		case "think":
+		case "switch_mode":
+			return "think";
+		default:
+			// ACP `other` / absent: keep the server's own title when it names
+			// something, else a neutral label. Unknown names draw a generic card.
+			return title?.trim() ? normalizeActivityTitle(title) : "Antigravity";
+	}
+}
+
+/** Lowercase snake-ish label from a server title, safe as a tool name. */
+function normalizeActivityTitle(title: string): string {
+	const cleaned = title
+		.trim()
+		.toLowerCase()
+		.replace(/\s+/g, "_")
+		.replace(/[^a-z0-9_]/g, "")
+		.slice(0, 48);
+	return cleaned || "Antigravity";
+}
+
+function handleToolUpdate(
+	turn: AntigravityAcpTurn,
+	state: AntigravityAcpStreamState,
 	update: Extract<SessionUpdate, { sessionUpdate: "tool_call" | "tool_call_update" }>,
-): string {
-	const title = update.title?.trim();
-	const label = title || update.toolCallId;
-	const status = update.status ?? "pending";
-	return `\n[${status}] ${label}\n`;
+): void {
+	let tracked = turn.blocks.get(update.toolCallId);
+	if (!tracked) {
+		endText(state);
+		endThinking(state);
+		const toolName = mapToolName(update.kind, update.title);
+		const block: TrackedToolBlock["block"] = {
+			type: "toolCall",
+			id: update.toolCallId,
+			name: toolName,
+			arguments: toolArguments(update, toolName),
+			[kCursorExecResolved]: true,
+		};
+		state.output.content.push(block);
+		tracked = {
+			block,
+			contentIndex: state.output.content.length - 1,
+			toolName,
+			ended: false,
+			paired: false,
+		};
+		turn.blocks.set(update.toolCallId, tracked);
+		state.stream.push({ type: "toolcall_start", contentIndex: tracked.contentIndex, partial: state.output });
+	} else if (update.kind !== undefined || update.title !== undefined) {
+		tracked.toolName = mapToolName(update.kind, update.title) || tracked.toolName;
+		tracked.block.name = tracked.toolName;
+	}
+	// Later frames refine arguments (rawInput, diff). The cumulative
+	// `message_update` re-lists the block, so no extra delta event is needed —
+	// mutating `block.arguments` is enough for live and rebuilt paths alike.
+	if (update.rawInput !== undefined || hasDiffContent(update) || update.locations !== undefined) {
+		tracked.block.arguments = { ...tracked.block.arguments, ...toolArguments(update, tracked.toolName) };
+	}
+
+	const status = update.status;
+	if (status === "completed" || status === "failed") {
+		endToolBlock(state, tracked);
+		const text = resultText(update.rawOutput) ?? update.title?.trim() ?? "completed";
+		void deliverToolResult(turn, tracked, text, status === "failed");
+	}
+}
+
+/** Frames carrying a diff/content payload (tool_call / tool_call_update). */
+function hasDiffContent(update: { content?: unknown }): boolean {
+	return Array.isArray(update.content) && update.content.length > 0;
+}
+
+function endToolBlock(state: AntigravityAcpStreamState, tracked: TrackedToolBlock): void {
+	if (tracked.ended) return;
+	tracked.ended = true;
+	state.stream.push({
+		type: "toolcall_end",
+		contentIndex: tracked.contentIndex,
+		toolCall: tracked.block,
+		partial: state.output,
+	});
+}
+
+async function deliverToolResult(
+	turn: AntigravityAcpTurn,
+	tracked: TrackedToolBlock,
+	text: string,
+	isError: boolean,
+): Promise<void> {
+	if (tracked.paired) return;
+	tracked.paired = true;
+	const result: ToolResultMessage = {
+		role: "toolResult",
+		toolCallId: tracked.block.id,
+		toolName: tracked.toolName,
+		content: [{ type: "text", text }],
+		isError,
+		timestamp: Date.now(),
+	};
+	try {
+		await turn.onToolResult?.(result);
+	} catch {
+		// A rejecting transformer mirrors Cursor: the reserved payload stands.
+	}
+}
+
+/** Map an ACP tool frame onto the built-in tool's argument shape, for the TUI. */
+function toolArguments(
+	update: Extract<SessionUpdate, { sessionUpdate: "tool_call" | "tool_call_update" }>,
+	toolName: string,
+): Record<string, unknown> {
+	const raw = asRecord(update.rawInput);
+	const location = update.locations?.find(loc => loc.path)?.path;
+	const diff = firstDiff(update);
+	switch (toolName) {
+		case "edit": {
+			const path = strOf(raw?.TargetFile ?? raw?.file_path ?? raw?.path) ?? location;
+			const out: Record<string, unknown> = {};
+			if (path) out.path = path;
+			// Render-only diff fields: the TUI edit renderer reads newText/diff.
+			if (diff) {
+				if (diff.oldText !== undefined) out.oldText = diff.oldText;
+				if (diff.newText !== undefined) out.newText = diff.newText;
+			}
+			return out;
+		}
+		case "read": {
+			const path = strOf(raw?.file_path ?? raw?.TargetFile ?? raw?.path) ?? location;
+			return path ? { path } : {};
+		}
+		case "bash": {
+			const command = strOf(raw?.CommandLine ?? raw?.command_line ?? raw?.command);
+			return command ? { command } : {};
+		}
+		case "grep": {
+			const pattern = strOf(raw?.pattern ?? raw?.Pattern ?? raw?.query);
+			const path = strOf(raw?.path ?? raw?.dir) ?? location;
+			const out: Record<string, unknown> = {};
+			if (pattern) out.pattern = pattern;
+			if (path) out.path = path;
+			return out;
+		}
+		default: {
+			// Unknown/generic card: surface the raw input verbatim, plus the
+			// server's title as intent so the working line has context.
+			const out: Record<string, unknown> = raw ? { ...raw } : {};
+			const title = update.title?.trim();
+			if (title) out[INTENT_FIELD] = title;
+			return out;
+		}
+	}
+}
+
+function firstDiff(update: { content?: unknown }): { oldText?: string; newText?: string } | undefined {
+	if (!Array.isArray(update.content)) return undefined;
+	for (const item of update.content) {
+		const rec = asRecord(item);
+		if (!rec) continue;
+		if (rec.type === "diff" || typeof rec.newText === "string") {
+			return {
+				oldText: typeof rec.oldText === "string" ? rec.oldText : undefined,
+				newText: typeof rec.newText === "string" ? rec.newText : undefined,
+			};
+		}
+	}
+	return undefined;
+}
+
+/** Flatten ACP `rawOutput` (string or structured object) into display text. */
+function resultText(rawOutput: unknown): string | undefined {
+	if (typeof rawOutput === "string") return rawOutput.trim() || undefined;
+	const rec = asRecord(rawOutput);
+	if (!rec) return undefined;
+	for (const key of ["combinedOutput", "formatted_output", "output", "CommandOutput", "rawOutput"]) {
+		const value = rec[key];
+		if (typeof value === "string" && value.trim()) return value;
+	}
+	return undefined;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+	return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+}
+
+function strOf(value: unknown): string | undefined {
+	return typeof value === "string" && value ? value : undefined;
 }
 
 /**
@@ -355,11 +597,13 @@ async function startAntigravityAcpSession(session: AntigravityAcpSession, cwd: s
 	session.currentModeId = created.modes?.currentModeId;
 
 	connection.exited.then(() => {
-		if (session.activeTurn) {
-			const state = session.activeTurn.state;
+		const turn = session.activeTurn;
+		if (turn) {
+			const state = turn.state;
 			if (!state.stream.done) {
 				state.output.stopReason = "error";
 				state.output.errorMessage = "The Antigravity server process exited mid-turn.";
+				turn.flushUnfinished();
 				state.stream.push({ type: "error", reason: "error", error: state.output });
 			}
 		}
@@ -616,10 +860,14 @@ function endThinking(state: AntigravityAcpStreamState): void {
 function finishStream(
 	state: AntigravityAcpStreamState,
 	session: AntigravityAcpSession,
+	turn: AntigravityAcpTurn,
 	reason: "stop" | "length" | "aborted",
 ): void {
 	endText(state);
 	endThinking(state);
+	// Every mirrored block needs toolcall_end + a paired result, or the
+	// rebuild strips the whole interaction as an unanswered call.
+	turn.flushUnfinished();
 	if (reason === "aborted") {
 		state.output.stopReason = "aborted";
 		state.stream.push({ type: "error", reason: "aborted", error: state.output });
