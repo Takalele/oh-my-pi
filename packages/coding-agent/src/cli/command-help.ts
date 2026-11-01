@@ -11,6 +11,10 @@ export const anonymizeHelp = {
 		"Write a shareable copy of a session and its subagents: turn contents redacted, metadata kept, paths and literals replaced by consistent mock tokens",
 } satisfies CommandMetadata;
 
+export const antigravityHelp = {
+	description: "Manage the official Antigravity ACP runtime (install, update, remove, status)",
+} satisfies CommandMetadata;
+
 export const authHelp = {
 	description: "Export or import stored provider credentials (API keys and OAuth logins) as JSON",
 } satisfies CommandMetadata;

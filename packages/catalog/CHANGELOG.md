@@ -6,6 +6,10 @@
 
 - Removed the `google-antigravity` provider (direct access to the private Antigravity backend) for Antigravity ToS compliance; `google-gemini-cli` (Cloud Code Assist) remains supported.
 
+### Added
+
+- Added the `antigravity` provider: bundled plan-Gemini model rows driven by Google's official `antigravity-acp` binary, selectable like any other provider.
+
 ## [18.14.1] - 2026-10-31
 
 ### Changed

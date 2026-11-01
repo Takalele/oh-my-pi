@@ -28,6 +28,16 @@ If account rotation would narrow the selected model's context window, OMP stops 
 
 Factory's native context limits hold even when extended context is disabled. Factory GPT and Gemini routes omit output-token caps, so bounded ephemeral turns reject a `maxTokens` request instead of silently running uncapped.
 
+## Google Antigravity
+
+The `antigravity` provider drives Google's **official** Antigravity agent through the unmodified `antigravity-acp` binary from the ACP Registry. `omp` is a plain ACP client: it spawns the pinned binary, signs in through the binary's own Google OAuth flow, and streams the agent's replies back as a model. There is no API key and no omp-side Google credential — the binary owns the sign-in, so this path only serves the models included in your Google plan (Gemini).
+
+1. Install the runtime once: `omp antigravity install` (verify with `omp antigravity status`; `omp antigravity update` re-checks the pinned version).
+2. Run `/login antigravity` (or `omp login antigravity`). The server prints a Google sign-in link; complete it in your browser.
+3. Pick a model like any other provider (e.g. `gemini-3.7-flash-high`) and prompt. The agent runs its own file/terminal tools inside the session directory; their activity shows as reasoning summaries, not as omp tool calls.
+
+omp never reads, proxies, or pools the Google tokens the binary stores, and offers no quota probing — usage comes only from what the agent reports during a turn. `OMP_ANTIGRAVITY_ACP_PATH` points omp at a user-managed `agy_acp_server` binary instead of the managed download.
+
 ## How `omp` decides a provider is available
 
 The model registry composes these sources:
@@ -218,7 +228,7 @@ SingularityAPI sells two unrelated products behind one brand, so OMP models them
 
 `singularityapi-tech` is the reserved DeepSeek lanes gateway. Usage bills against a booked reservation slot rather than prepaid credit, so a valid key with no active slot answers 403 until you book one at `https://app.singularityapi.tech`. Create an `sk-...` key there (or run `/login singularityapi-tech`), set `SINGULARITYAPI_TECH_API_KEY`, and the lane roster is discovered live from `https://api.singularityapi.tech/v1/models`.
 
-OAuth-backed providers such as `anthropic`, `openai-codex`, `github-copilot`, `cursor`, `muse-code`, `ollama-cloud`, `qwen-portal`, `kimi-code`, `xai-oauth`, `wafer-serverless`, `google-gemini-cli`, `devin`, and the GitLab providers (`gitlab-duo`, `gitlab-duo-agent`) are normally reached through `/login` rather than an environment variable. Interactive API-key logins exist too: `/login baseten`, `/login coreweave`, `/login sakana`, `/login singularityapi-dev`, and `/login singularityapi-tech` prompt for a dashboard/API key (`coreweave` additionally requires `COREWEAVE_PROJECT` for the `OpenAI-Project` header). See [Environment variables](./environment-variables.md) for search-tool and configuration variables not listed here.
+OAuth-backed providers such as `anthropic`, `openai-codex`, `github-copilot`, `cursor`, `muse-code`, `ollama-cloud`, `qwen-portal`, `kimi-code`, `xai-oauth`, `wafer-serverless`, `google-gemini-cli`, `antigravity`, `devin`, and the GitLab providers (`gitlab-duo`, `gitlab-duo-agent`) are normally reached through `/login` rather than an environment variable. Interactive API-key logins exist too: `/login baseten`, `/login coreweave`, `/login sakana`, `/login singularityapi-dev`, and `/login singularityapi-tech` prompt for a dashboard/API key (`coreweave` additionally requires `COREWEAVE_PROJECT` for the `OpenAI-Project` header). See [Environment variables](./environment-variables.md) for search-tool and configuration variables not listed here.
 
 ### `.env` discovery and precedence
 

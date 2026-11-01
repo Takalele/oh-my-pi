@@ -6,6 +6,10 @@
 
 - Removed the `google-antigravity` provider: its OAuth sign-in, Cloud Code Assist request spoofing, image generation, and usage tracking are gone for Antigravity ToS compliance. `google-gemini-cli` (Cloud Code Assist) is unaffected.
 
+### Added
+
+- Added the `antigravity` provider (`antigravity-acp` API): drives Google's official Antigravity ACP binary as a model — local spawn, sign-in relay, session, streamed turns — with no omp-side Google credentials.
+
 ## [18.14.1] - 2026-10-31
 
 ### Added

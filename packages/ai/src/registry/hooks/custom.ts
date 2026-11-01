@@ -9,9 +9,11 @@ export const CUSTOM_LOGIN_HOOKS: Record<string, Lazy<LoginHook>> = {
 	cursor: () => import("../oauth/cursor").then(module => module.loginCursorHook),
 	perplexity: () => import("../oauth/perplexity").then(module => module.loginPerplexity),
 	snowflake: () => import("../oauth/snowflake").then(module => module.loginSnowflake),
+	"antigravity-acp": () => import("../oauth/antigravity-acp").then(module => module.loginAntigravityAcpHook),
 };
 export const CUSTOM_REFRESH_HOOKS: Record<string, Lazy<RefreshHook>> = {
 	"github-copilot": () => import("../oauth/github-copilot").then(module => module.refreshGitHubCopilotHook),
 	cursor: () => import("../oauth/cursor").then(module => module.refreshCursorHook),
 	snowflake: () => import("../oauth/snowflake").then(module => module.refreshSnowflakeToken),
+	"antigravity-acp": () => import("../oauth/antigravity-acp").then(module => module.refreshAntigravityAcpHook),
 };

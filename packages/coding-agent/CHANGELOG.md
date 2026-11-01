@@ -6,6 +6,10 @@
 
 - Removed Google Antigravity sign-in, usage reporting, image generation, and the `providers.antigravityEndpoint` setting for Antigravity ToS compliance; `google-gemini-cli` (Cloud Code Assist) is unaffected.
 
+### Added
+
+- Added the ToS-compliant `antigravity` provider: `omp antigravity install|update|remove|status` manages Google's official Antigravity ACP runtime, `/login antigravity` signs in through the binary's own Google flow, and its plan-Gemini models appear in the picker like any other provider.
+
 ## [18.14.1] - 2026-10-31
 
 ### Added

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added `@oh-my-pi/pi-utils/antigravity`: pinned release lookup, managed install/update/remove for the official `antigravity-acp` binary, profile/env isolation, and the ACP client connection helper.
+
 ## [18.14.1] - 2026-10-31
 
 ### Added

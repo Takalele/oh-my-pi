@@ -9,6 +9,7 @@ export type KnownProvider =
 	| "alibaba-token-plan"
 	| "amazon-bedrock"
 	| "anthropic"
+	| "antigravity"
 	| "apple"
 	| "azure"
 	| "baseten"

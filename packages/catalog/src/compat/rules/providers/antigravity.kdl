@@ -1,0 +1,94 @@
+// Catalog entry for "antigravity": Google's official Antigravity agent, driven
+// through the unmodified `antigravity-acp` binary (ACP Registry) as an
+// agent-as-model. No direct Google API surface, so no deployment-contract
+// compat rules apply. Rows are the plan-Gemini SKUs the binary reports in its
+// `configOptions` model select; the `-low/-medium/-high` tiers collapse into
+// effort families by the shared variant grammar (compat/collapse.ts).
+
+provider "antigravity" {
+	default-model "gemini-3.7-flash-high"
+	// The binary's own sign-in owns credentials; there is no env-var key and
+	// no HTTP discovery surface — the bundled rows are the catalog.
+	seed api="antigravity-acp" base-url="https://antigravity.google" bundle="always" {
+		model "gemini-3.8-flash-high" name="Gemini 3.8 Flash (High)" {
+			reasoning #true
+			input "text"
+			cost input=0 output=0 cache-read=0 cache-write=0
+			limits context=1000000
+			supports-tools #true
+		}
+		model "gemini-3.8-flash-medium" name="Gemini 3.8 Flash (Medium)" {
+			reasoning #true
+			input "text"
+			cost input=0 output=0 cache-read=0 cache-write=0
+			limits context=1000000
+			supports-tools #true
+		}
+		model "gemini-3.8-flash-low" name="Gemini 3.8 Flash (Low)" {
+			reasoning #true
+			input "text"
+			cost input=0 output=0 cache-read=0 cache-write=0
+			limits context=1000000
+			supports-tools #true
+		}
+		model "gemini-3.7-flash-high" name="Gemini 3.7 Flash (High)" {
+			reasoning #true
+			input "text"
+			cost input=0 output=0 cache-read=0 cache-write=0
+			limits context=1000000
+			supports-tools #true
+		}
+		model "gemini-3.7-flash-medium" name="Gemini 3.7 Flash (Medium)" {
+			reasoning #true
+			input "text"
+			cost input=0 output=0 cache-read=0 cache-write=0
+			limits context=1000000
+			supports-tools #true
+		}
+		model "gemini-3.7-flash-low" name="Gemini 3.7 Flash (Low)" {
+			reasoning #true
+			input "text"
+			cost input=0 output=0 cache-read=0 cache-write=0
+			limits context=1000000
+			supports-tools #true
+		}
+		model "gemini-3.6-flash-high" name="Gemini 3.6 Flash (High)" {
+			reasoning #true
+			input "text"
+			cost input=0 output=0 cache-read=0 cache-write=0
+			limits context=1000000
+			supports-tools #true
+		}
+		model "gemini-3.6-flash-medium" name="Gemini 3.6 Flash (Medium)" {
+			reasoning #true
+			input "text"
+			cost input=0 output=0 cache-read=0 cache-write=0
+			limits context=1000000
+			supports-tools #true
+		}
+		model "gemini-3.6-flash-low" name="Gemini 3.6 Flash (Low)" {
+			reasoning #true
+			input "text"
+			cost input=0 output=0 cache-read=0 cache-write=0
+			limits context=1000000
+			supports-tools #true
+		}
+		// Pro lanes keep the binary's own ids: `gemini-pro-agent` is the high
+		// lane and `gemini-3.1-pro-low` the low lane, with unrelated bases, so
+		// they stay independent SKUs rather than one collapsed family.
+		model "gemini-pro-agent" name="Gemini 3.1 Pro (High)" {
+			reasoning #true
+			input "text"
+			cost input=0 output=0 cache-read=0 cache-write=0
+			limits context=1000000
+			supports-tools #true
+		}
+		model "gemini-3.1-pro-low" name="Gemini 3.1 Pro (Low)" {
+			reasoning #true
+			input "text"
+			cost input=0 output=0 cache-read=0 cache-write=0
+			limits context=1000000
+			supports-tools #true
+		}
+	}
+}
