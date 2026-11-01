@@ -136,6 +136,55 @@ async function main(): Promise<void> {
 					if (stopReason === "cancelled") setTimeout(() => process.exit(0), 50);
 					break;
 				}
+				if (mode === "denied") {
+					// Approval-mode echo: pending frame (also carried in the
+					// request_permission request), then the approval never
+					// executed under this id, then a re-run under another id.
+					notify("session/update", {
+						sessionId,
+						update: {
+							sessionUpdate: "tool_call",
+							toolCallId: "tc-denied",
+							title: "Run edit_file?",
+							kind: "edit",
+							status: "pending",
+							content: [{ type: "diff", path: "src/b.ts", oldText: "a\n", newText: "b\n" }],
+							locations: [{ path: "/tmp/src/b.ts" }],
+							rawInput: { TargetFile: "/tmp/src/b.ts", ReplacementContent: "b\n" },
+						},
+					});
+					notify("session/update", {
+						sessionId,
+						update: {
+							sessionUpdate: "tool_call_update",
+							toolCallId: "tc-denied",
+							status: "failed",
+							rawOutput: "Tool call was approved but never executed.",
+						},
+					});
+					notify("session/update", {
+						sessionId,
+						update: {
+							sessionUpdate: "tool_call",
+							toolCallId: "tc-retry",
+							title: "Running edit_file",
+							kind: "edit",
+							status: "in_progress",
+							rawInput: { file_path: "/tmp/src/b.ts" },
+						},
+					});
+					notify("session/update", {
+						sessionId,
+						update: {
+							sessionUpdate: "tool_call_update",
+							toolCallId: "tc-retry",
+							status: "completed",
+							rawOutput: "Edited src/b.ts",
+						},
+					});
+					respond(id, { stopReason: "end_turn" });
+					break;
+				}
 				if (process.env.ANTIGRAVITY_FAKE_ECHO === "1") {
 					notify("session/update", {
 						sessionId,

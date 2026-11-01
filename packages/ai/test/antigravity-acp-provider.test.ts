@@ -123,6 +123,34 @@ describe("antigravity-acp provider", () => {
 		sessions.clear();
 	});
 
+	it("drops a permission echo whose approval never executed and keeps the re-run card", async () => {
+		useFakeAgent("denied");
+		const sessions = new Map<string, ProviderSessionState>();
+		const results: ToolResultMessage[] = [];
+		const stream = streamAntigravityAcp(model, context, {
+			cwd: configDir,
+			sessionId: "omp-session-denied",
+			providerSessionState: sessions,
+			cursorOnToolResult: result => {
+				results.push(result);
+				return result;
+			},
+		});
+		for await (const event of stream) void event;
+		const result = await stream.result();
+
+		// The echoed `Run edit_file?` call ended failed ("approved but never
+		// executed") without ever running: no card, no failed result. Only the
+		// re-run under a new id is mirrored.
+		const calls = result.content.filter(block => block.type === "toolCall");
+		expect(calls).toHaveLength(1);
+		expect(calls[0].type === "toolCall" && calls[0].id).toBe("tc-retry");
+		expect(results).toHaveLength(1);
+		expect(results[0]).toMatchObject({ toolCallId: "tc-retry", isError: false });
+		for (const state of sessions.values()) state.close();
+		sessions.clear();
+	});
+
 	it("missing runtime surfaces the install hint instead of an implicit download", async () => {
 		delete process.env[ANTIGRAVITY_ACP_PATH_ENV];
 		delete process.env.ANTIGRAVITY_FAKE_MODE;
