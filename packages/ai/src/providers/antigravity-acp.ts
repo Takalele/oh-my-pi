@@ -27,7 +27,7 @@ import {
 	type AntigravityAcpConnection,
 	type AntigravityAcpInstall,
 } from "@oh-my-pi/pi-utils/antigravity";
-import type { Client, ContentBlock, SessionConfigOption, SessionUpdate } from "@oh-my-pi/pi-utils/acp";
+import type { Client, ContentBlock, SessionConfigOption, SessionUpdate, ToolCallUpdate } from "@oh-my-pi/pi-utils/acp";
 import { logger, VERSION } from "@oh-my-pi/pi-utils";
 import * as AIError from "../error";
 import type { Effort } from "@oh-my-pi/pi-catalog/effort";
@@ -109,6 +109,14 @@ interface AntigravityAcpTurn {
 	state: AntigravityAcpStreamState;
 	/** toolCallId → mirrored toolCall block awaiting completion/pairing. */
 	blocks: Map<string, TrackedToolBlock>;
+	/**
+	 * `pending` frames held back without a block: in approval mode the binary
+	 * first echoes the call it is about to ask permission for (same
+	 * `toolCallId` as the `session/request_permission` request). Mirroring
+	 * that echo would show a card for a call that may never run; the
+	 * execution frames that follow create the block and inherit its diff.
+	 */
+	pendingFrames: Map<string, ToolFrame>;
 	/** Pairs each mirrored block with a synthesized toolResult (Cursor-exec path). */
 	onToolResult?: CursorToolResultHandler;
 	onUpdate(update: SessionUpdate): void;
@@ -275,9 +283,11 @@ function createTurn(
 	options: AntigravityAcpOptions,
 ): AntigravityAcpTurn {
 	const byId = new Map<string, TrackedToolBlock>();
+	const pending = new Map<string, ToolFrame>();
 	const turn: AntigravityAcpTurn = {
 		state,
 		blocks: byId,
+		pendingFrames: pending,
 		onToolResult: options.cursorOnToolResult,
 		onUpdate(update) {
 			switch (update.sessionUpdate) {
@@ -368,21 +378,39 @@ function normalizeActivityTitle(title: string): string {
 	return cleaned || "Antigravity";
 }
 
-function handleToolUpdate(
-	turn: AntigravityAcpTurn,
-	state: AntigravityAcpStreamState,
-	update: Extract<SessionUpdate, { sessionUpdate: "tool_call" | "tool_call_update" }>,
-): void {
+/** ACP tool frame: the `tool_call` payload satisfies this superset shape. */
+type ToolFrame = ToolCallUpdate & { sessionUpdate: "tool_call" | "tool_call_update" };
+
+function handleToolUpdate(turn: AntigravityAcpTurn, state: AntigravityAcpStreamState, update: ToolFrame): void {
 	let tracked = turn.blocks.get(update.toolCallId);
 	if (!tracked) {
+		const status = update.status ?? "in_progress";
+		if (status === "pending") {
+			// Approval echo: the same `toolCallId` also arrives in the
+			// `session/request_permission` request, and the call may never run
+			// (denied, or re-issued under another id). Hold it — the diff and
+			// rawInput seed the card if an execution frame follows.
+			const seen = turn.pendingFrames.get(update.toolCallId);
+			turn.pendingFrames.set(update.toolCallId, seen ? mergeFrames(seen, update) : update);
+			return;
+		}
+		const echoed = turn.pendingFrames.get(update.toolCallId);
+		turn.pendingFrames.delete(update.toolCallId);
+		if (status === "failed" && echoed) {
+			// Terminal failure for a call that was only ever echoed: the
+			// approval did not lead to execution here. No work happened, so
+			// no card — a failed card would report an execution that was not.
+			return;
+		}
 		endText(state);
 		endThinking(state);
-		const toolName = mapToolName(update.kind, update.title);
+		const frame = echoed ? mergeFrames(echoed, update) : update;
+		const toolName = mapToolName(frame.kind, frame.title);
 		const block: TrackedToolBlock["block"] = {
 			type: "toolCall",
 			id: update.toolCallId,
 			name: toolName,
-			arguments: toolArguments(update, toolName),
+			arguments: toolArguments(frame, toolName),
 			[kCursorExecResolved]: true,
 		};
 		state.output.content.push(block);
@@ -412,6 +440,20 @@ function handleToolUpdate(
 		const text = resultText(update.rawOutput) ?? update.title?.trim() ?? "completed";
 		void deliverToolResult(turn, tracked, text, status === "failed");
 	}
+}
+
+/** Overlay a later frame onto an earlier one; absent/null fields carry over. */
+function mergeFrames(base: ToolFrame, next: ToolFrame): ToolFrame {
+	return {
+		...base,
+		...next,
+		kind: next.kind ?? base.kind,
+		title: next.title ?? base.title,
+		content: next.content ?? base.content,
+		locations: next.locations ?? base.locations,
+		rawInput: next.rawInput ?? base.rawInput,
+		rawOutput: next.rawOutput ?? base.rawOutput,
+	};
 }
 
 /** Frames carrying a diff/content payload (tool_call / tool_call_update). */
@@ -454,10 +496,7 @@ async function deliverToolResult(
 }
 
 /** Map an ACP tool frame onto the built-in tool's argument shape, for the TUI. */
-function toolArguments(
-	update: Extract<SessionUpdate, { sessionUpdate: "tool_call" | "tool_call_update" }>,
-	toolName: string,
-): Record<string, unknown> {
+function toolArguments(update: ToolFrame, toolName: string): Record<string, unknown> {
 	const raw = asRecord(update.rawInput);
 	const location = update.locations?.find(loc => loc.path)?.path;
 	const diff = firstDiff(update);
