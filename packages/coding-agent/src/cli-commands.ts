@@ -63,6 +63,11 @@ export const commands: CommandEntry[] = [
 		help: commandHelp.anonymizeHelp,
 	},
 	{
+		name: "antigravity",
+		load: () => import("./commands/antigravity").then(m => m.default),
+		help: commandHelp.antigravityHelp,
+	},
+	{
 		name: "bench",
 		load: () => import("./commands/bench").then(m => m.default),
 		help: commandHelp.benchHelp,

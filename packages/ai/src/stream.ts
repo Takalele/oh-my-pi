@@ -34,6 +34,7 @@ import { ProviderHttpError } from "./error";
 import { assertProviderEnabled } from "./registry/oauth";
 import { isConcurrencyCapExclusion, isUsageLimitOutcome } from "./error/rate-limit";
 import type { BedrockOptions } from "./providers/amazon-bedrock";
+import type { AntigravityAcpOptions } from "./providers/antigravity-acp";
 import { reachesOfficialEndpoint } from "./providers/anthropic-state";
 import type { AnthropicOptions } from "./providers/anthropic";
 import type { AppleFoundationModelsOptions } from "./providers/apple-foundation-models";
@@ -52,6 +53,7 @@ import type { OpenAICompletionsOptions } from "./providers/openai-completions";
 import { streamPiNative } from "./providers/pi-native-client";
 import { streamSynthetic } from "./providers/synthetic";
 import {
+	streamAntigravityAcp,
 	streamAnthropic,
 	streamAppleFoundationModels,
 	streamAzureOpenAIResponses,
@@ -935,6 +937,13 @@ function streamDispatch<TApi extends Api>(
 	if (model.api === "bedrock-converse-stream") {
 		return streamBedrock(model as Model<"bedrock-converse-stream">, context, requestOptions as BedrockOptions);
 	}
+	// Antigravity drives a local official binary over ACP; there is no API key.
+	if (model.api === "antigravity-acp") {
+		return streamAntigravityAcp(model as Model<"antigravity-acp">, context, {
+			...(requestOptions as StreamOptions | undefined),
+		} as AntigravityAcpOptions);
+	}
+
 	if (model.api === "factory-droid-agent") {
 		return streamFactoryDroid(model as Model<"factory-droid-agent">, context, {
 			...(requestOptions as FactoryDroidOptions),
@@ -2391,6 +2400,20 @@ function mapOptionsForApi<TApi extends Api>(
 				toolChoice: options?.toolChoice,
 				reasoning: options?.disableReasoning || options?.forceReasoningOff ? undefined : options?.reasoning,
 			});
+		case "antigravity-acp": {
+			const antigravityModel = model as Model<"antigravity-acp">;
+			const effort =
+				options?.reasoning && !options.disableReasoning && !options.forceReasoningOff
+					? requireSupportedEffort(antigravityModel, options.reasoning)
+					: undefined;
+			// The SKU id + effort map onto the binary's model/thought_level
+			// configOptions inside the provider; only cwd is a wire option here.
+			return castApi<"antigravity-acp">({
+				...base,
+				cwd: options?.cwd,
+				reasoning: effort,
+			});
+		}
 		case "devin-agent": {
 			const devinModel = model as Model<"devin-agent">;
 			const effort =

@@ -13,9 +13,11 @@ export const CUSTOM_LOGIN_HOOKS: Record<string, Lazy<LoginHook>> = {
 	"mistral-vibe-sign-in": async () => loginMistralVibeSignIn,
 	"devin-cli": () => import("../oauth/devin-cli").then(module => module.loginDevinCliHook),
 	"devin-windsurf": () => import("../oauth/devin-windsurf").then(module => module.loginDevinWindsurfHook),
+	"antigravity-acp": () => import("../oauth/antigravity-acp").then(module => module.loginAntigravityAcpHook),
 };
 export const CUSTOM_REFRESH_HOOKS: Record<string, Lazy<RefreshHook>> = {
 	"github-copilot": () => import("../oauth/github-copilot").then(module => module.refreshGitHubCopilotHook),
 	cursor: () => import("../oauth/cursor").then(module => module.refreshCursorHook),
 	snowflake: () => import("../oauth/snowflake").then(module => module.refreshSnowflakeToken),
+	"antigravity-acp": () => import("../oauth/antigravity-acp").then(module => module.refreshAntigravityAcpHook),
 };

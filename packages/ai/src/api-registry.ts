@@ -33,6 +33,7 @@ const BUILTIN_API_IDS = [
 	"gitlab-duo-agent",
 	"devin-agent",
 	"apple-foundation-models",
+	"antigravity-acp",
 ] as const satisfies readonly KnownApi[];
 
 type _MissingBuiltinApis = Exclude<KnownApi, (typeof BUILTIN_API_IDS)[number]>;

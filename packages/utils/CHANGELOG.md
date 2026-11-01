@@ -85,6 +85,9 @@
 ### Added
 
 - Added `oklabDistance`, the perceptual distance between two hex colors ([#17520](https://github.com/can1357/oh-my-pi/pull/17520))
+### Added
+
+- Added `@oh-my-pi/pi-utils/antigravity`: pinned release lookup, managed install/update/remove for the official `antigravity-acp` binary, profile/env isolation, and the ACP client connection helper.
 
 ## [18.14.1] - 2026-10-31
 

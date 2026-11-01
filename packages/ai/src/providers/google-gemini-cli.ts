@@ -15,7 +15,6 @@ import type {
 	Model,
 	StreamFunction,
 	StreamOptions,
-	TextContent,
 	ToolCall,
 } from "../types";
 import { normalizeSystemPrompts } from "../utils";

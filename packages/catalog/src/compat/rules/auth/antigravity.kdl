@@ -1,0 +1,12 @@
+// Google Antigravity sign-in drives Google's official ACP binary: the hook
+// installs the pinned `antigravity-acp` server, ensures an auth profile, and
+// relays the binary's own OAuth sign-in URL. omp stores only a marker
+// credential — the binary owns the Google tokens (ToS: single-user personal
+// sign-in through the unmodified official client).
+
+auth "antigravity" {
+	name "Google Antigravity"
+	allows-missing-api-key #true
+	login "custom" hook="antigravity-acp"
+	refresh hook="antigravity-acp"
+}

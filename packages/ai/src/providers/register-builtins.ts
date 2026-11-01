@@ -300,6 +300,19 @@ export const streamDevin = createLazyProviderStream(
 	mod => mod.streamDevin,
 );
 
+/**
+ * Stream Antigravity (local official ACP binary) with provider-owned timeouts.
+ * The shared network watchdog would misread the agent's own long tool runs
+ * (terminal builds run silent for minutes) as a stalled connection; teardown
+ * is driven by caller cancel and process exit instead, both wired in the
+ * provider module.
+ */
+export const streamAntigravityAcp = createLazyProviderStream(
+	() => import("./antigravity-acp"),
+	mod => mod.streamAntigravityAcp,
+	PROVIDER_HANDLED_STREAM_TIMEOUTS,
+);
+
 /** Stream Apple's on-device Foundation Model through the shared watchdog. */
 export const streamAppleFoundationModels = createLazyProviderStream(
 	() => import("./apple-foundation-models"),
