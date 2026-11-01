@@ -15,14 +15,14 @@ const ZERO_USAGE: Usage = {
 function createGoogleModel(
 	id: string,
 	api: "google-generative-ai" | "google-vertex" = "google-generative-ai",
-	provider: "google" | "google-antigravity" | "google-vertex" = api === "google-vertex" ? "google-vertex" : "google",
+	provider: "google" | "google-vertex" = api === "google-vertex" ? "google-vertex" : "google",
 ): Model<typeof api> {
 	return buildModel({
 		id,
 		name: id,
 		api,
 		provider: provider,
-		baseUrl: provider === "google-antigravity" ? "https://daily-cloudcode-pa.googleapis.com" : "https://example.com",
+		baseUrl: "https://example.com",
 		reasoning: false,
 		input: ["text", "image"],
 		cost: {
@@ -36,12 +36,12 @@ function createGoogleModel(
 	});
 }
 
-function createCloudCodeAssistModel(provider: "google-antigravity" | "google-gemini-cli"): Model<"google-gemini-cli"> {
+function createCloudCodeAssistModel(id = "gemini-3.5-flash"): Model<"google-gemini-cli"> {
 	return buildModel({
-		id: "gemini-3.5-flash",
-		name: "gemini-3.5-flash",
+		id,
+		name: id,
 		api: "google-gemini-cli",
-		provider,
+		provider: "google-gemini-cli",
 		baseUrl: "https://cloudcode-pa.googleapis.com",
 		reasoning: false,
 		input: ["text", "image"],
@@ -93,7 +93,10 @@ function contextWithToolResult(toolName = "stale_tool_name"): Context {
 	};
 }
 
-function functionCallAndResponse(model: Model<"google-generative-ai" | "google-vertex">, context: Context) {
+function functionCallAndResponse(
+	model: Model<"google-generative-ai" | "google-vertex" | "google-gemini-cli">,
+	context: Context,
+) {
 	const contents = convertMessages(model, context);
 	const functionCall = contents.find(c => c.role === "model")?.parts?.find(part => part.functionCall)?.functionCall;
 	const functionResponse = contents
@@ -147,8 +150,8 @@ describe("Google GenerateContent function response matching", () => {
 		]);
 	});
 
-	it("keeps Claude call IDs on non-Vertex Google-compatible endpoints", () => {
-		const model = createGoogleModel("claude-sonnet-4-5", "google-generative-ai", "google-antigravity");
+	it("keeps Claude call IDs on the Cloud Code Assist host", () => {
+		const model = createCloudCodeAssistModel("claude-sonnet-4-5");
 		const { functionCall, functionResponse } = functionCallAndResponse(
 			model,
 			contextWithToolResult("actual_tool_name"),
@@ -201,7 +204,6 @@ describe("Google GenerateContent parallel function response order", () => {
 	it.each([
 		{ route: "Gemini API, Gemini 2.5", model: createGoogleModel("gemini-2.5-flash") },
 		{ route: "Vertex", model: createGoogleModel("gemini-3.5-flash", "google-vertex") },
-		{ route: "Antigravity", model: createCloudCodeAssistModel("google-antigravity") },
 		{ route: "Gemini CLI", model: createCloudCodeAssistModel("google-gemini-cli") },
 		{ route: "Gemini API, Gemini 3.5", model: createGoogleModel("gemini-3.5-flash") },
 	])("sends same-name results in call order: $route", ({ model }) => {

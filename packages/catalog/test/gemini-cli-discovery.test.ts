@@ -5,9 +5,8 @@ import { googleGeminiCliModelManagerOptions } from "@oh-my-pi/pi-catalog/provide
 const CCA = "https://cloudcode-pa.googleapis.com";
 
 /**
- * Builds a fetch stub that emulates a Gemini Code Assist Standard credential:
- * the Antigravity `fetchAvailableModels` endpoint is forbidden, while the
- * account's own `loadCodeAssist` / `retrieveUserQuota` calls on Cloud Code
+ * Builds a fetch stub for a Gemini Code Assist credential: the account's own
+ * `loadCodeAssist` / `retrieveUserQuota` calls on Cloud Code
  * Assist succeed. `quotaStatus` overrides the quota response status.
  */
 function standardTierFetcher(
@@ -19,9 +18,6 @@ function standardTierFetcher(
 		(input: string | URL | Request, _init?: RequestInit) => {
 			const url = String(input);
 			options.recorded?.push(url);
-			if (url.includes(":fetchAvailableModels")) {
-				return Promise.resolve(new Response("Forbidden", { status: 403 }));
-			}
 			if (url.includes(":loadCodeAssist")) {
 				return Promise.resolve(
 					new Response(JSON.stringify({ cloudaicompanionProject: "acme-gcp" }), { status: 200 }),
@@ -36,16 +32,16 @@ function standardTierFetcher(
 	);
 }
 
-describe("gemini-cli quota discovery fallback", () => {
-	it("surfaces quota-listed models when Antigravity discovery is forbidden (#9315)", async () => {
+describe("gemini-cli quota discovery", () => {
+	it("surfaces quota-listed models without touching any other backend (#9315)", async () => {
 		const recorded: string[] = [];
 		const fetcher = standardTierFetcher(["gemini-3.5-flash", "gemini-2.5-pro"], { recorded });
 		const options = googleGeminiCliModelManagerOptions({ oauthToken: "t", endpoint: CCA, fetch: fetcher });
 
 		const models = await options.fetchDynamicModels?.();
 
-		// Antigravity path was attempted first, then the quota fallback ran.
-		expect(recorded.some(url => url.includes(":fetchAvailableModels"))).toBe(true);
+		// Discovery reads only the credential's own Cloud Code Assist endpoints.
+		expect(recorded.some(url => url.includes(":fetchAvailableModels"))).toBe(false);
 		expect(recorded.some(url => url.startsWith(`${CCA}/v1internal:retrieveUserQuota`))).toBe(true);
 		expect(models?.map(m => m.id).sort()).toEqual(["gemini-2.5-pro", "gemini-3.5-flash"]);
 		expect(models?.every(m => m.provider === "google-gemini-cli")).toBe(true);

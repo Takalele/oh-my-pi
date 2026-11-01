@@ -19,7 +19,7 @@ import {
 } from "@oh-my-pi/pi-ai";
 import { clampThinkingLevelForModel, resolveWireModelId } from "@oh-my-pi/pi-catalog/model-thinking";
 import { parseCloudflareCredential } from "@oh-my-pi/pi-catalog/wire/cloudflare";
-import { getAntigravityHeaders, getGeminiCliHeaders } from "@oh-my-pi/pi-catalog/wire/gemini-headers";
+import { getGeminiCliHeaders } from "@oh-my-pi/pi-catalog/wire/gemini-headers";
 import { type ConfiguredThinkingLevel, concreteThinkingLevel, toReasoningEffort } from "@oh-my-pi/pi-tui/thinking";
 import { fetchWithRetry, USER_AGENT } from "@oh-my-pi/pi-utils";
 
@@ -98,7 +98,6 @@ export function buildGeminiRequestTools(params: GeminiToolParams): Array<Record<
 interface GeminiAuth {
 	accessToken: string;
 	projectId: string;
-	isAntigravity: boolean;
 }
 
 /** First configured Gemini OAuth provider plus its pre-resolved access. */
@@ -390,19 +389,12 @@ async function callGeminiSearch(
 	timeoutMs: number | undefined,
 ): Promise<GeminiSearchResult> {
 	const endpoint = baseUrl.replace(/\/+$/, "");
-	const headers = auth.isAntigravity
-		? getAntigravityHeaders()
-		: { Accept: "text/event-stream", ...getGeminiCliHeaders() };
+	const headers = { Accept: "text/event-stream", ...getGeminiCliHeaders() };
 
-	const requestMetadata = auth.isAntigravity
-		? {
-				userAgent: "antigravity",
-				requestId: `agent-${crypto.randomUUID()}`,
-			}
-		: {
-				userAgent: USER_AGENT,
-				requestId: `omp-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
-			};
+	const requestMetadata = {
+		userAgent: USER_AGENT,
+		requestId: `omp-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
+	};
 
 	const normalizedSystemPrompt = systemPrompt?.toWellFormed();
 	const systemInstructionParts: Array<{ text: string }> = normalizedSystemPrompt
@@ -420,12 +412,7 @@ async function callGeminiSearch(
 				},
 			],
 			tools: buildGeminiRequestTools(toolParams),
-			...(systemInstructionParts.length > 0 && {
-				systemInstruction: {
-					...(auth.isAntigravity ? { role: "user" } : {}),
-					parts: systemInstructionParts,
-				},
-			}),
+			...(systemInstructionParts.length > 0 && { systemInstruction: { parts: systemInstructionParts } }),
 		},
 		...requestMetadata,
 	};
@@ -573,7 +560,6 @@ export async function searchGemini(params: GeminiSearchParams): Promise<SearchRe
 		if (!seed) {
 			throw new Error(`No Gemini OAuth credentials found for selected provider "${params.model.provider}".`);
 		}
-		const isAntigravity = params.model.provider === "google-antigravity";
 		result = await withOAuthAccess(
 			params.authStorage,
 			seed.provider,
@@ -586,7 +572,6 @@ export async function searchGemini(params: GeminiSearchParams): Promise<SearchRe
 					{
 						accessToken: access.accessToken,
 						projectId: access.projectId ?? seed.projectId,
-						isAntigravity,
 					},
 					selectedModel,
 					params.model.baseUrl,
@@ -678,11 +663,7 @@ export class GeminiProvider extends SearchProvider {
 			if (model.api === "google-generative-ai") return authStorage.keys.source(model.provider) !== undefined;
 			return false;
 		}
-		return (
-			authStorage.credentials.hasOAuth("google-antigravity") ||
-			authStorage.credentials.hasOAuth("google-gemini-cli") ||
-			authStorage.keys.source("google") !== undefined
-		);
+		return authStorage.credentials.hasOAuth("google-gemini-cli") || authStorage.keys.source("google") !== undefined;
 	}
 
 	search(params: SearchParams): Promise<SearchResponse> {

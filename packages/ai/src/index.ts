@@ -53,7 +53,6 @@ export * from "./usage/cursor";
 export * from "./usage/factory-droid";
 export * from "./usage/gemini";
 export * from "./usage/github-copilot";
-export * from "./usage/google-antigravity";
 export * from "./usage/kimi";
 export * from "./usage/minimax-code";
 export * from "./usage/muse-code";

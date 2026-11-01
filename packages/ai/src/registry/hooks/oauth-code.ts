@@ -10,7 +10,6 @@ export const OAUTH_CODE_AFTER_EXCHANGE_HOOKS: Record<string, Lazy<AfterExchangeH
 	"openai-codex-profile": () => import("../oauth/openai-codex").then(m => m.openAICodexProfileHook),
 	"zai-mint-key": () => import("../oauth/zai").then(m => m.zaiMintKeyHook),
 	"google-gemini-cli-project": () => import("../oauth/google-gemini-cli").then(m => m.googleGeminiCliProjectHook),
-	"google-antigravity-project": () => import("../oauth/google-antigravity").then(m => m.googleAntigravityProjectHook),
 };
 export const OAUTH_CODE_VALUE_HOOKS: Record<string, Lazy<ValueHook>> = {};
 export const OAUTH_CODE_LOGIN_HOOKS: Record<string, Lazy<LoginHook>> = {

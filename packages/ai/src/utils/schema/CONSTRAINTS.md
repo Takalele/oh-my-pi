@@ -190,6 +190,6 @@ When adding/changing provider adapters:
 3. Never bypass adapter helpers (`adaptSchemaForStrict`, `normalizeSchemaForGoogle`, `normalizeSchemaForCCA`, `normalizeSchemaForMCP`) in provider code.
 4. If a provider rejects schema with partial support, prefer deterministic per-tool fallback over request-wide failure.
 
-## 6) Gemini CLI / Antigravity CCA parity
+## 6) Gemini CLI CCA parity
 
-The Gemini CLI / Antigravity Claude path MUST run the same full `normalizeSchemaForCCA` pipeline as the shared Google Claude path. It MUST NOT call only the first keyword-stripping pass, because that leaves object combiners, nullable unions, residual combiners, and fallback gating inconsistent between transports.
+The Gemini CLI Claude path MUST run the same full `normalizeSchemaForCCA` pipeline as the shared Google Claude path. It MUST NOT call only the first keyword-stripping pass, because that leaves object combiners, nullable unions, residual combiners, and fallback gating inconsistent between transports.

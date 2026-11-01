@@ -1,8 +1,8 @@
 /**
- * Shared OAuth flow for Google-style providers (Gemini CLI, Antigravity).
+ * Shared OAuth flow for Google-style providers (currently Gemini CLI).
  *
- * Both providers use the same authorization-code flow shape; only the client
- * credentials, scopes, endpoint constants, and project-discovery logic differ.
+ * The authorization-code flow shape is common; client credentials, scopes,
+ * endpoint constants, and project-discovery logic differ per provider.
  */
 import * as AIError from "../../error";
 

@@ -121,7 +121,7 @@ describe("AIError.classify — structural provider errors", () => {
 		const err = new AIError.ProviderResponseError(
 			"Cloud Code Assist API returned a thought-only response without final output",
 			{
-				provider: "google-antigravity",
+				provider: "google-gemini-cli",
 				kind: "empty-output",
 			},
 		);

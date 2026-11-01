@@ -50,7 +50,7 @@ describe("isAuthRetryableError", () => {
 			isAuthRetryableError(
 				new OAuthError("OAuth token expired before request", {
 					kind: "token-refresh",
-					provider: "google-antigravity",
+					provider: "google-gemini-cli",
 				}),
 			),
 		).toBe(true);
@@ -58,7 +58,7 @@ describe("isAuthRetryableError", () => {
 			isAuthRetryableError(
 				new OAuthError("OAuth provider is misconfigured", {
 					kind: "configuration",
-					provider: "google-antigravity",
+					provider: "google-gemini-cli",
 				}),
 			),
 		).toBe(false);

@@ -150,7 +150,7 @@ describe("google-gemini-cli Gemini 3.x thinking mapping", () => {
 			id: "gemini-3.7-flash",
 			name: "Gemini 3.7 Flash",
 			api: "google-gemini-cli",
-			provider: "google-antigravity",
+			provider: "google-gemini-cli",
 			baseUrl: "https://daily-cloudcode-pa.googleapis.com",
 			reasoning: true,
 			thinking: {

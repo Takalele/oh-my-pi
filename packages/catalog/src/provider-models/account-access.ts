@@ -6,7 +6,7 @@ import type { Api, ModelSpec } from "../types";
  * The first catalog to list an id supplies its spec; {@link ModelSpec.accountAccess}
  * is merged from every catalog listing that id, so credential selection can
  * route account-gated models to the accounts that serve them. Used by
- * multi-account discovery for Codex and Antigravity, whose rosters differ per
+ * multi-account discovery for Codex, whose rosters differ per
  * account.
  */
 export function unionAccountCatalogs<TApi extends Api>(

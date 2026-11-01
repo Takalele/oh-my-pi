@@ -19,7 +19,7 @@ All exports live under `@oh-my-pi/pi-ai/utils/schema`:
 
 - `normalizeSchema(value, options)` — generic option-driven walker.
 - `normalizeSchemaForGoogle(value)` — Gemini / Vertex / Gemini CLI.
-- `normalizeSchemaForCCA(value)` — Cloud Code Assist Claude (Antigravity + GCA).
+- `normalizeSchemaForCCA(value)` — Cloud Code Assist Claude (Gemini CLI + GCA).
 - `normalizeSchemaForMCP(value)` — MCP inputSchemas before they enter the
   custom-tool registry. `tool-bridge.ts` runs every MCP `inputSchema` through
   this dispatcher.
@@ -76,7 +76,7 @@ Removed in the unified-flow refactor:
 | MCP `inputSchema` ingestion                                                 | `normalizeSchemaForMCP`                                                      |
 | `anthropic-messages` (native, not CCA)                                      | per-provider whitelist in `anthropic.ts`                                     |
 
-Gemini CLI / Antigravity CCA MUST run the full `normalizeSchemaForCCA`
+Gemini CLI CCA MUST run the full `normalizeSchemaForCCA`
 pipeline (not just the first keyword-stripping pass) to keep parity with the
 shared Google Claude path.
 

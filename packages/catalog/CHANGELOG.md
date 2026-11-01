@@ -208,6 +208,9 @@
 ### Fixed
 
 - Fixed GitHub Copilot Claude 5.x base models (`claude-opus-5`, `claude-opus-5.5`, `claude-sonnet-5`, `claude-sonnet-5.5`) reporting the 1M window of their `-1m` variants once the model list was read from cache; discovered limits now survive cached reads instead of reverting to bundled values ([#17481](https://github.com/can1357/oh-my-pi/issues/17481))
+### Breaking Changes
+
+- Removed the `google-antigravity` provider (direct access to the private Antigravity backend) for Antigravity ToS compliance; `google-gemini-cli` (Cloud Code Assist) remains supported.
 
 ## [18.14.1] - 2026-10-31
 

@@ -25,7 +25,7 @@ describe("extractGoogleValidationUrl", () => {
 
 	it("extracts the url when the body is wrapped in the discovery error prefix", () => {
 		// exchangeToken receives discoverProject's thrown message, which embeds the raw body.
-		const wrapped = `Could not discover or provision an Antigravity project. loadCodeAssist failed: 403 Forbidden: ${validationBody}`;
+		const wrapped = `Could not discover or provision a Cloud Code Assist project. loadCodeAssist failed: 403 Forbidden: ${validationBody}`;
 		expect(extractGoogleValidationUrl(wrapped)).toBe(VALIDATION_URL);
 	});
 

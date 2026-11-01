@@ -9,11 +9,7 @@ import type { AuthStorage, OAuthCredential } from "../session/auth-storage";
  * Built-in providers whose discovery requires provider-specific credentials
  * or account expansion and therefore cannot use the standard descriptor path.
  */
-export const SPECIAL_MODEL_MANAGER_PROVIDER_IDS: readonly string[] = [
-	"google-antigravity",
-	"google-gemini-cli",
-	"openai-codex",
-];
+export const SPECIAL_MODEL_MANAGER_PROVIDER_IDS: readonly string[] = ["google-gemini-cli", "openai-codex"];
 
 const STARTUP_MODEL_CACHE_PROVIDER_IDS_RECORD: Record<string, true> = Object.create(null);
 for (const providerId of [
@@ -142,7 +138,7 @@ export function getOAuthCredentialsForProvider(authStorage: AuthStorage, provide
 
 /**
  * Resolve every stored OAuth account of an account-scoped discovery provider
- * (Codex `/models`, Antigravity `fetchAvailableModels`), refreshing each
+ * (Codex `/models`, Gemini CLI `fetchAvailableModels`), refreshing each
  * credential exactly once. Discovery must fetch per account and union the
  * results; resolving a single access token hid models available only through
  * a sibling account (#6265, #14924).

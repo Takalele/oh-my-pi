@@ -957,41 +957,41 @@ describe("RemoteAuthCredentialStore + AuthStorage integration", () => {
 
 	test("hands a provider's lone usage report only to a credential its identity cannot contradict", async () => {
 		// Bob's fetch succeeded and Alice's failed, so the aggregate holds one
-		// Antigravity report. The shared project must not give Alice Bob's
+		// Cloud Code Assist report. The shared project must not give Alice Bob's
 		// exhausted pool, and her header overlay must not land on his row.
 		const brokerClient = new AuthBrokerClient({ url: "http://127.0.0.1:9", token: "unused" });
 		const now = Date.now();
 		const projectId = "shared-project";
 		const weeklyLimit = (usedFraction: number): UsageLimit => ({
-			id: "google-antigravity:weekly",
+			id: "google-gemini-cli:weekly",
 			label: "Weekly",
-			scope: { provider: "google-antigravity", projectId, windowId: "weekly" },
+			scope: { provider: "google-gemini-cli", projectId, windowId: "weekly" },
 			window: { id: "weekly", label: "Weekly" },
 			amount: { usedFraction, unit: "percent" },
 			status: usedFraction >= 1 ? "exhausted" : "ok",
 		});
 		const bobReport: UsageReport = {
-			provider: "google-antigravity",
+			provider: "google-gemini-cli",
 			fetchedAt: now,
 			limits: [weeklyLimit(1)],
 			metadata: { email: "bob@example.com", projectId },
 		};
 		// Lone reports stay usable when they share no identity field with the
-		// credential, or match one Gemini copied verbatim into a limit scope.
+		// credential, or match one Google copied verbatim into a limit scope.
 		const cursorReport: UsageReport = {
 			provider: "cursor",
 			fetchedAt: now,
 			limits: [],
 			metadata: { email: "carol@example.com" },
 		};
-		const geminiReport: UsageReport = {
-			provider: "google-gemini-cli",
+		const googleReport: UsageReport = {
+			provider: "google",
 			fetchedAt: now,
 			limits: [
 				{
-					id: "google-gemini-cli:pro",
+					id: "google:pro",
 					label: "Pro",
-					scope: { provider: "google-gemini-cli", accountId: " account-dave " },
+					scope: { provider: "google", accountId: " account-dave " },
 					amount: { usedFraction: 0.2, unit: "percent" },
 				},
 			],
@@ -999,7 +999,7 @@ describe("RemoteAuthCredentialStore + AuthStorage integration", () => {
 		};
 		vi.spyOn(brokerClient, "fetchUsage").mockResolvedValue({
 			generatedAt: now,
-			reports: [bobReport, cursorReport, geminiReport],
+			reports: [bobReport, cursorReport, googleReport],
 		});
 		const remoteStore = new RemoteAuthCredentialStore({
 			client: brokerClient,
@@ -1021,9 +1021,9 @@ describe("RemoteAuthCredentialStore + AuthStorage integration", () => {
 		});
 		const alice = credential({ email: "alice@example.com", projectId });
 		try {
-			expect(await remoteStore.getUsageReport("google-antigravity", alice)).toBeNull();
+			expect(await remoteStore.getUsageReport("google-gemini-cli", alice)).toBeNull();
 			const bob = await remoteStore.getUsageReport(
-				"google-antigravity",
+				"google-gemini-cli",
 				credential({ email: "bob@example.com", projectId }),
 			);
 			expect(bob?.metadata?.email).toBe("bob@example.com");
@@ -1033,22 +1033,22 @@ describe("RemoteAuthCredentialStore + AuthStorage integration", () => {
 				{ email: "dave@example.com" },
 				{ email: "dave@example.com", accountId: " account-dave " },
 			]) {
-				const gemini = await remoteStore.getUsageReport("google-gemini-cli", credential(dave));
-				expect(gemini?.metadata?.currentTierId).toBe("standard-tier");
+				const google = await remoteStore.getUsageReport("google", credential(dave));
+				expect(google?.metadata?.currentTierId).toBe("standard-tier");
 			}
 
 			const aliceOverlay: UsageReport = {
-				provider: "google-antigravity",
+				provider: "google-gemini-cli",
 				fetchedAt: now,
 				limits: [weeklyLimit(0.1)],
 				metadata: { email: "alice@example.com", projectId },
 			};
-			expect(remoteStore.ingestUsageReport("google-antigravity", alice, aliceOverlay)).toBe(true);
-			const antigravityRows = (await remoteStore.fetchUsageReports())
-				?.filter(report => report.provider === "google-antigravity")
-				.map(report => [report.metadata?.email, requireLimit(report, "google-antigravity:weekly").status])
+			expect(remoteStore.ingestUsageReport("google-gemini-cli", alice, aliceOverlay)).toBe(true);
+			const cliRows = (await remoteStore.fetchUsageReports())
+				?.filter(report => report.provider === "google-gemini-cli")
+				.map(report => [report.metadata?.email, requireLimit(report, "google-gemini-cli:weekly").status])
 				.toSorted();
-			expect(antigravityRows).toEqual([
+			expect(cliRows).toEqual([
 				["alice@example.com", "ok"],
 				["bob@example.com", "exhausted"],
 			]);

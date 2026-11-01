@@ -131,11 +131,11 @@ describe("limitMatchesActiveAccount", () => {
 	test("a shared Google project or Team account id never stands in for a different email", () => {
 		const project = "aicode-consumers";
 		const alice = { email: "alice@example.com", projectId: project };
-		const antigravityReport = (email: string) =>
-			makeReport({ provider: "google-antigravity", metadata: { email, projectId: project } });
-		const sharedProjectLimit = makeLimit({ provider: "google-antigravity", projectId: project });
-		expect(limitMatchesActiveAccount(antigravityReport("bob@example.com"), sharedProjectLimit, alice)).toBe(false);
-		expect(limitMatchesActiveAccount(antigravityReport("alice@example.com"), sharedProjectLimit, alice)).toBe(true);
+		const geminiCliReport = (email: string) =>
+			makeReport({ provider: "google-gemini-cli", metadata: { email, projectId: project } });
+		const sharedProjectLimit = makeLimit({ provider: "google-gemini-cli", projectId: project });
+		expect(limitMatchesActiveAccount(geminiCliReport("bob@example.com"), sharedProjectLimit, alice)).toBe(false);
+		expect(limitMatchesActiveAccount(geminiCliReport("alice@example.com"), sharedProjectLimit, alice)).toBe(true);
 		// Codex Team seats share the workspace account and org ids.
 		const seat = { email: "alice@example.com", accountId: "workspace", orgId: "workspace" };
 		const teammateReport = makeReport({
@@ -235,10 +235,10 @@ describe("toLogoutAccounts org scoping", () => {
 		expect(activeIds).toEqual([1]);
 	});
 
-	test("Antigravity accounts on one Google project: only the active email's row is marked active", () => {
+	test("Gemini CLI accounts on one Google project: only the active email's row is marked active", () => {
 		const row = (id: number, email: string): StoredAuthCredential => ({
 			id,
-			provider: "google-antigravity",
+			provider: "google-gemini-cli",
 			credential: {
 				type: "oauth",
 				access: `access-${id}`,
@@ -249,13 +249,9 @@ describe("toLogoutAccounts org scoping", () => {
 			},
 			disabledCause: null,
 		});
-		const accounts = toLogoutAccounts(
-			"google-antigravity",
-			[row(1, "alice@example.com"), row(2, "bob@example.com")],
-			{
-				activeIdentity: { email: "alice@example.com", projectId: "aicode-consumers" },
-			},
-		);
+		const accounts = toLogoutAccounts("google-gemini-cli", [row(1, "alice@example.com"), row(2, "bob@example.com")], {
+			activeIdentity: { email: "alice@example.com", projectId: "aicode-consumers" },
+		});
 		const activeIds = accounts.filter(account => account.active).map(account => account.credentialId);
 		expect(activeIds).toEqual([1]);
 	});

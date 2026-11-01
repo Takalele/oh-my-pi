@@ -72,7 +72,7 @@ class "gemini" {
 	// google-level transports emit `thinkingLevel` on the wire, so the tier is
 	// dropped there; budget (anthropic-messages) and reasoning_effort resellers
 	// never send the rejected value and keep the four-tier ladder. The collapsed
-	// google-antigravity / google-gemini-cli variants remap minimal -> LOW and
+	// google-gemini-cli variants remap minimal -> LOW and
 	// carry their own explicit ladder, so they are unaffected.
 	// https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/start/get-started-with-gemini-4
 	// https://ai.google.dev/gemini-api/docs/generate-content/thinking#thinking-levels
@@ -123,7 +123,7 @@ class "gemini" {
 	// https://aistudio.google.com/docs/pricing
 	// https://cloud.google.com/vertex-ai/generative-ai/pricing
 	// https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-4-carbon-now-available/
-	on "google" "google-vertex" "google-antigravity" {
+	on "google" "google-vertex" {
 		models "gemini-4-argon" "gemini-4-carbon" {
 			cost-patch {
 				input 2
@@ -139,21 +139,6 @@ class "gemini" {
 						cache-write 0
 					}
 				}
-			}
-		}
-	}
-
-	// Gemini 4 Hydrogen: $1.50/$7.50, cache read $0.075 on the Gemini API and
-	// Vertex; Antigravity discovery reports $0, so the collapsed row is pinned to
-	// the same card.
-	// https://aistudio.google.com/docs/whats-new-gemini-4-hydrogen
-	on "google-antigravity" {
-		models "gemini-4-hydrogen" {
-			cost-patch {
-				input 1.5
-				output 7.5
-				cache-read 0.075
-				cache-write 0
 			}
 		}
 	}
@@ -181,7 +166,7 @@ class "gemini" {
 			supports-function-part-id #true
 		}
 	}
-	on "google-antigravity" "google-gemini-cli" {
+	on "google-gemini-cli" {
 		family "flash" {
 			stream-first-event-timeout-ms 60000
 			flash-stream-leak-workaround #true

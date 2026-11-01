@@ -122,7 +122,7 @@ export function collectUnreportedAccounts(
 		// any same-org report). The email/account fallback below applies only
 		// when both sides are org-less. When both the account and a report carry
 		// an email, it decides: Codex Team seats share an account id and
-		// Antigravity accounts share one Google project.
+		// Google OAuth accounts can share one Cloud project.
 		const accountOrg = account.orgId?.toLowerCase();
 		const email = account.email?.toLowerCase();
 		const ids = [account.email, account.accountId, account.projectId]

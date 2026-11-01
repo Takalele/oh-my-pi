@@ -232,7 +232,7 @@ SingularityAPI sells two unrelated products behind one brand, so OMP models them
 
 For Mistral, set `MISTRAL_API_KEY` to a key created on the Mistral console, or run `/login mistral` to sign in through the browser the way the Mistral Vibe CLI does. The browser sign-in mints a regular API key tied to your Mistral plan: its usage counts against the plan's Vibe Code quota instead of pay-as-you-go API credits. OMP stores it as a plain API key; there is nothing to refresh.
 
-OAuth-backed providers such as `anthropic`, `openai-codex`, `github-copilot`, `cursor`, `muse-code`, `ollama-cloud`, `qwen-portal`, `kimi-code`, `xai-oauth`, `wafer-serverless`, `google-gemini-cli`, `google-antigravity`, `devin`, and the GitLab providers (`gitlab-duo`, `gitlab-duo-agent`) are normally reached through `/login` rather than an environment variable. Interactive API-key logins exist too: `/login baseten`, `/login coreweave`, `/login sakana`, `/login singularityapi-dev`, and `/login singularityapi-tech` prompt for a dashboard/API key (`coreweave` additionally requires `COREWEAVE_PROJECT` for the `OpenAI-Project` header). See [Environment variables](./environment-variables.md) for search-tool and configuration variables not listed here.
+OAuth-backed providers such as `anthropic`, `openai-codex`, `github-copilot`, `cursor`, `muse-code`, `ollama-cloud`, `qwen-portal`, `kimi-code`, `xai-oauth`, `wafer-serverless`, `google-gemini-cli`, `devin`, and the GitLab providers (`gitlab-duo`, `gitlab-duo-agent`) are normally reached through `/login` rather than an environment variable. Interactive API-key logins exist too: `/login baseten`, `/login coreweave`, `/login sakana`, `/login singularityapi-dev`, and `/login singularityapi-tech` prompt for a dashboard/API key (`coreweave` additionally requires `COREWEAVE_PROJECT` for the `OpenAI-Project` header). See [Environment variables](./environment-variables.md) for search-tool and configuration variables not listed here.
 
 ### `.env` discovery and precedence
 
@@ -292,7 +292,7 @@ disabledProviders:
    - groq
 ```
 
-Provider IDs are matched exactly. Disable `google` to hide the Google Gemini API provider; the OAuth-backed Google providers `google-gemini-cli` and `google-antigravity` are separate IDs and must be disabled individually. Disable `ollama`, `llama.cpp`, or `lm-studio` to stop local discovery for that engine.
+Provider IDs are matched exactly. Disable `google` to hide the Google Gemini API provider; the OAuth-backed Google provider `google-gemini-cli` is a separate ID and must be disabled individually. Disable `ollama`, `llama.cpp`, or `lm-studio` to stop local discovery for that engine.
 
 `disabledProviders` applies uniformly to:
 

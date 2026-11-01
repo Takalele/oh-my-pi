@@ -453,7 +453,7 @@ describe("stats scheduled response costs", () => {
 		const dated = {
 			...codexReferenceModel,
 			id: "dated-card-model",
-			provider: "google-antigravity",
+			provider: "google",
 			cost: {
 				input: 2,
 				output: 10,

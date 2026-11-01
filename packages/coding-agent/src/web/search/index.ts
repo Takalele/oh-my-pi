@@ -41,7 +41,7 @@ import {
 	type SearchResultDetails,
 } from "./types";
 
-import { cfgProvidersAntigravityEndpoint, cfgProvidersWebSearchTimeoutSeconds } from "../../session/settings";
+import { cfgProvidersWebSearchTimeoutSeconds } from "../../session/settings";
 
 /** Web search tool parameters schema */
 export const webSearchSchema = type({
@@ -239,14 +239,6 @@ async function executeSearch(
 		parsedQuery.sites.length > 0 && parsedQuery.sites.every(site => site.split("/", 1)[0] === "news.ycombinator.com");
 	if (!params.model && hnOnly) expanded = preferHackerNews(expanded, pool);
 
-	// Invariant across candidates; resolve once before walking the role chain.
-	let antigravityEndpointMode: "auto" | "production" | "sandbox" | undefined;
-	try {
-		antigravityEndpointMode = cfgProvidersAntigravityEndpoint.get(settings);
-	} catch {
-		antigravityEndpointMode = undefined;
-	}
-
 	let timeoutMs = DEFAULT_WEB_SEARCH_TIMEOUT_SECONDS * 1_000;
 	try {
 		const configuredSeconds = cfgProvidersWebSearchTimeoutSeconds.get(settings);
@@ -321,7 +313,6 @@ async function executeSearch(
 				modelRegistry,
 				explicit: candidate.explicit,
 				sessionId,
-				antigravityEndpointMode,
 			});
 
 			// A host that silently drops the hosted search tool still answers from the

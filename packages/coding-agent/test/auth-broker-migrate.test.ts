@@ -115,7 +115,7 @@ describe("auth-broker migrate", () => {
 
 	test.each([
 		{
-			provider: "google-antigravity",
+			provider: "google-gemini-cli",
 			shared: "project",
 			identity: { projectId: "aicode-consumers" },
 			local: ["alice@gmail.com", "bob@gmail.com"],
