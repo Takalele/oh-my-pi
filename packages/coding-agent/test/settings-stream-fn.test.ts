@@ -1,6 +1,6 @@
 /**
  * Contract: `createSettingsAwareStreamFn` layers session provider settings
- * (`providers.openrouterVariant`, `providers.antigravityEndpoint`,
+ * (`providers.openrouterVariant`,
  * `providers.stream*TimeoutSeconds`, `providers.maxInFlightRequests`,
  * `model.loopGuard.*`, `textVerbosity` for Responses-family requests)
  * options win — the same wiring the main agent and the advisor agent share so
@@ -89,7 +89,6 @@ describe("createSettingsAwareStreamFn", () => {
 	it("applies provider settings to the forwarded options when caller omits them", () => {
 		const settings = Settings.isolated({
 			"providers.openrouterVariant": "floor",
-			"providers.antigravityEndpoint": "sandbox",
 			"providers.maxInFlightRequests": { openrouter: 4 },
 			"model.loopGuard.enabled": true,
 			"model.loopGuard.checkAssistantContent": true,
@@ -101,7 +100,6 @@ describe("createSettingsAwareStreamFn", () => {
 
 		const options = calls[0]?.options;
 		expect(options?.openrouterVariant).toBe("floor");
-		expect(options?.antigravityEndpointMode).toBe("sandbox");
 		expect(options?.maxInFlightRequests).toEqual({ openrouter: 4 });
 		expect(options?.loopGuard).toEqual({ enabled: true, checkAssistantContent: true });
 		// caller's own option is preserved
@@ -203,7 +201,6 @@ describe("createSettingsAwareStreamFn", () => {
 	it("lets caller-supplied options override the session settings", () => {
 		const settings = Settings.isolated({
 			"providers.openrouterVariant": "floor",
-			"providers.antigravityEndpoint": "sandbox",
 			"providers.maxInFlightRequests": { openrouter: 4 },
 			"model.loopGuard.enabled": true,
 		});
@@ -212,7 +209,6 @@ describe("createSettingsAwareStreamFn", () => {
 
 		wrapped(stubModel, stubContext, {
 			openrouterVariant: "nitro",
-			antigravityEndpointMode: "production",
 			maxInFlightRequests: { openrouter: 1 },
 			loopGuard: { enabled: false },
 			hideThinkingSummary: false,
@@ -220,7 +216,6 @@ describe("createSettingsAwareStreamFn", () => {
 
 		const options = calls[0]?.options;
 		expect(options?.openrouterVariant).toBe("nitro");
-		expect(options?.antigravityEndpointMode).toBe("production");
 		expect(options?.maxInFlightRequests).toEqual({ openrouter: 1 });
 		// Loop guard merges per-field: caller wins on `enabled`, settings fill
 		// the rest (the inline closure the main agent used has the same shape).

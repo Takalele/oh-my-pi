@@ -11,7 +11,7 @@ import type { Api, Model } from "./types";
 // Rows persist fully materialized Models so compatible warm-cache reads do not
 // rerun the compat cascade. Request headers are intentionally omitted:
 // arbitrary provider-defined header names can carry credentials. v14
-// invalidates Antigravity rows predating per-SKU `antigravityWireProfiles`
+// invalidates rows predating per-SKU wire-profile metadata
 // (model_enum label, output cap, SKU thinking). v13 replaces
 // sparse ModelSpec rows with materialized rows and records the exact app/rules/
 // builder policy that produced them. v12 invalidated Kimi Code rows carrying the blanket
@@ -21,7 +21,7 @@ import type { Api, Model } from "./types";
 // headers and records which model ids lost headers or cannot be rebuilt.
 // v9 invalidated Kimi Code rows predating live effort and protocol metadata;
 // v8 invalidated Codex discovery rows predating provider-native V2 compaction
-// metadata; v7 invalidated rows predating the Antigravity Gemini budget-mode
+// metadata; v7 invalidated rows predating the Gemini budget-mode
 // migration (cached specs still carrying `thinking.mode: "google-level"` and
 // the old 3.5-flash effort routing); v6 invalidated rows that may contain the
 // retired unknown-limit sentinels (222222/8888); v5 invalidated rows predating

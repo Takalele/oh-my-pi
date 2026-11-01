@@ -314,8 +314,8 @@ export function matchesReplacementCredential(
  * Whether two OAuth credentials belong to the same account of the same organization,
  * whichever identity key each is stored under. The email decides when both carry one;
  * otherwise a matching account id does, unless it is the organization's own id (a
- * ChatGPT workspace id shared by every member). Project ids are shared between users
- * (every consumer Antigravity login has the same one) and never count.
+ * ChatGPT workspace id shared by every member). Project ids are shared between
+ * users (consumer Cloud Code Assist logins can land on the same one) and never count.
  */
 export function isSameOAuthAccount(a: OAuthCredential, b: OAuthCredential): boolean {
 	const orgId = normalizeStoredAccountId(a.orgId);

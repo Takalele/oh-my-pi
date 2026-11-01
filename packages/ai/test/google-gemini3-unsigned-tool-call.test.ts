@@ -13,7 +13,7 @@ import { getBundledModel } from "@oh-my-pi/pi-catalog/models";
 //
 // The contract therefore splits by transport:
 //   - public Gemini API: substitute the sentinel for every unsigned call.
-//   - CCA/Antigravity: substitute it only when the first call is unsigned.
+//   - Cloud Code Assist: substitute it only when the first call is unsigned.
 //   - Vertex: omit `thoughtSignature` on unsigned calls.
 
 const ZERO_USAGE: Usage = {
@@ -86,7 +86,7 @@ function toolCallParts(model: Model<GoogleApi>, context: Context) {
 
 describe("Gemini 3 unsigned tool-call signatures (#9638, #10602)", () => {
 	it("uses the sentinel only for an unsigned first call on Cloud Code Assist", () => {
-		for (const provider of ["google-antigravity", "google-gemini-cli"]) {
+		for (const provider of ["google-gemini-cli"]) {
 			const model = buildGeminiModel("google-gemini-cli", provider, "gemini-3.7-flash");
 
 			const parallel = parallelToolCalls("google-gemini-cli", provider, "gemini-3.7-flash");
@@ -104,10 +104,10 @@ describe("Gemini 3 unsigned tool-call signatures (#9638, #10602)", () => {
 	it("carries the first-call bypass policy on the bundled CCA catalog entry", () => {
 		// The runtime consumes models.json rows verbatim, so the baked compat — not
 		// the KDL — is what actually reaches convertMessages for a selected model.
-		const model = getBundledModel<"google-gemini-cli">("google-antigravity", "gemini-3.7-flash");
+		const model = getBundledModel<"google-gemini-cli">("google-gemini-cli", "gemini-3-pro-preview");
 		expect(model.compat.requiresSkipThoughtSignatureOnFirstFunctionCall).toBe(true);
 
-		const unsigned = unsignedFirstCall("google-gemini-cli", "google-antigravity", "gemini-3.7-flash");
+		const unsigned = unsignedFirstCall("google-gemini-cli", "google-gemini-cli", "gemini-3-pro-preview");
 		expect(toolCallParts(model as Model<GoogleApi>, unsigned)[0]?.thoughtSignature).toBe(SENTINEL);
 	});
 

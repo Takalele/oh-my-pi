@@ -1453,7 +1453,6 @@ describe("AgentSession message pipeline", () => {
 	});
 
 	it.each([
-		["Antigravity fixed-profile transport", getBundledModel("google-antigravity", "claude-sonnet-4-6")],
 		...(["cursor-agent", "gitlab-duo-agent"] as const).map(
 			api =>
 				[

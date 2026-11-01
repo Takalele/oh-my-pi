@@ -50,9 +50,13 @@ describe("Google thinking headroom in maxOutputTokens", () => {
 		["google-generative-ai level", bundled("google", "gemini-3.1-pro-preview"), "k"],
 		["google-vertex level", bundled("google-vertex", "gemini-3.1-pro-preview"), "k"],
 		[
-			// Without a discovered wire profile: a profiled SKU sends its roster's fixed cap instead.
-			"google-gemini-cli level (Antigravity argon)",
-			{ ...bundled("google-antigravity", "gemini-4-argon"), antigravityWireProfiles: undefined },
+			// The Cloud Code Assist envelope nests generationConfig under `request`.
+			"google-gemini-cli level",
+			{
+				...bundled("google", "gemini-4-argon"),
+				api: "google-gemini-cli",
+				provider: "google-gemini-cli",
+			} satisfies Model<Api>,
 			JSON.stringify({ token: "t", projectId: "p" }),
 		],
 	])("%s adds the effort's thinking estimate on top of the caller budget", async (_name, model, apiKey) => {

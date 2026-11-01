@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- Removed the `google-antigravity` provider (direct access to the private Antigravity backend) for Antigravity ToS compliance; `google-gemini-cli` (Cloud Code Assist) remains supported.
+
 ## [18.14.1] - 2026-10-31
 
 ### Changed

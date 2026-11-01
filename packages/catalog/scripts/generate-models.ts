@@ -12,8 +12,6 @@ const COPILOT_PREMIUM_MULTIPLIERS: Record<string, number> = {
 import * as path from "node:path";
 import { parseArgs } from "node:util";
 import { discoverAuthStorage } from "@oh-my-pi/pi-ai/auth-broker/discover";
-import type { OAuthAccess } from "@oh-my-pi/pi-ai/auth-storage";
-import type { OAuthProvider } from "@oh-my-pi/pi-ai/oauth/types";
 import { getGitLabDuoModels } from "@oh-my-pi/pi-ai/providers/gitlab-duo";
 import { getProviderDefinition } from "@oh-my-pi/pi-ai/registry";
 import { $env } from "@oh-my-pi/pi-utils";
@@ -22,7 +20,6 @@ import { isRetiredProvider } from "../src/compat/behavior";
 import { collapseVariants } from "../src/compat/collapse";
 import { providerEntries, providerEntry, seedModels } from "../src/compat/providers";
 import type { CompiledProvider } from "../src/compat/types";
-import { ANTIGRAVITY_PRIMARY_ENDPOINT, fetchAntigravityDiscoveryModels } from "../src/discovery/antigravity";
 import { encodeModelCatalog } from "../src/model-catalog-format";
 import { createModelManager } from "../src/model-manager";
 import { resolveModelTokenizer } from "../src/model-tokenizer";
@@ -441,76 +438,6 @@ function applyFireworksDeepSeekReasoningShape(models: readonly ModelSpec[]): Mod
 	});
 }
 
-function normalizeAntigravityEndpoint(models: readonly ModelSpec[]): ModelSpec[] {
-	return models.map(model => {
-		if (model.provider === "google-antigravity" && model.baseUrl) {
-			return { ...model, baseUrl: ANTIGRAVITY_PRIMARY_ENDPOINT };
-		}
-		return model;
-	});
-}
-
-const ANTIGRAVITY_ENDPOINT = ANTIGRAVITY_PRIMARY_ENDPOINT;
-
-async function getOAuthAccessFromStorage(provider: OAuthProvider): Promise<OAuthAccess | null> {
-	try {
-		const authStorage = await discoverAuthStorage();
-		try {
-			// `getOAuthAccess` runs the full AuthStorage refresh pipeline so an
-			// expired-but-refreshable credential gets rotated before discovery,
-			// and identity metadata (accountId/projectId/email) flows through
-			// for Codex/Antigravity downstream calls.
-			let access = await authStorage.oauth.access(provider);
-			if (!access && provider === "google-antigravity") {
-				access = await authStorage.oauth.access("google-gemini-cli");
-			}
-			return access ?? null;
-		} finally {
-			authStorage.close();
-		}
-	} catch (err) {
-		console.warn(
-			`Warning: Failed to retrieve credentials for ${provider}:`,
-			err instanceof Error ? err.message : String(err),
-		);
-		return null;
-	}
-}
-
-/**
- * Fetch available Antigravity models from the API using the discovery module.
- * Returns empty array if no auth is available (previous models used as fallback).
- */
-async function fetchAntigravityModels(): Promise<ModelSpec<"google-gemini-cli">[]> {
-	const access = await getOAuthAccessFromStorage("google-antigravity");
-	if (!access) {
-		console.log("No Antigravity or Gemini CLI credentials found, will use previous models.");
-		console.log("Tip: If you are logged in under a specific profile, run with OMP_PROFILE=<name>.");
-		return [];
-	}
-	try {
-		console.log("Fetching models from Antigravity API...");
-		const discovered = await fetchAntigravityDiscoveryModels({
-			token: access.accessToken,
-			projectId: access.projectId,
-			endpoint: ANTIGRAVITY_ENDPOINT,
-		});
-		if (discovered === null || discovered.rejectedStatus !== undefined) {
-			console.warn("Antigravity API fetch failed, will use previous models");
-			return [];
-		}
-		if (discovered.models.length > 0) {
-			console.log(`Fetched ${discovered.models.length} models from Antigravity API`);
-			return discovered.models;
-		}
-		console.warn("Antigravity API returned no models, will use previous models");
-		return [];
-	} catch (error) {
-		console.error("Failed to fetch Antigravity models:", error);
-		return [];
-	}
-}
-
 /**
  * Resolve every stored Codex OAuth account and union their account-scoped
  * `/models` catalogs through the same manager path the runtime uses (#6265).
@@ -612,7 +539,6 @@ async function generateModels(selectedProvider?: string) {
 	allModels.push(...buildFireworksFastSeed());
 
 	const specialDiscoverySources = [
-		{ label: "Antigravity", providerId: "google-antigravity", authoritative: false, fetch: fetchAntigravityModels },
 		{ label: "Codex", providerId: "openai-codex", authoritative: true, fetch: fetchCodexDiscoveryModels },
 	] as const;
 	const specialDiscoveries = await Promise.all(
@@ -677,14 +603,13 @@ async function generateModels(selectedProvider?: string) {
 	allModels = applyKimiCodeMaxTokens(allModels);
 	allModels = applyFireworksDeepSeekReasoningShape(allModels);
 	allModels = filterModelsDevCatalogRows(allModels);
-	allModels = normalizeAntigravityEndpoint(allModels);
 	// Previous-snapshot fallbacks keep their old baseUrl; re-base every OpenCode
 	// Go row so retained rows follow gateway endpoint moves (#15722).
 	allModels = allModels.map(model =>
 		model.provider === "opencode-go" ? { ...model, baseUrl: openCodeGoBaseUrlForApi(model.api) } : model,
 	);
 	// Normalize display names: gateway author prefixes ("OpenAI: …"), alias
-	// markers ("(latest)"), provider attribution ("(Antigravity)"), and
+	// markers ("(latest)"), provider attribution, and
 	// price/promo tags are model-extrinsic — strip them from the bundle.
 	allModels = allModels.map(model => {
 		const name = cleanModelName(model.name);

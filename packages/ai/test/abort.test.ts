@@ -170,7 +170,7 @@ describe("AI Providers Abort Tests", () => {
 		);
 	});
 
-	// Google Gemini CLI / Antigravity share the same provider, so one test covers both
+	// Cloud Code Assist transport covers the Gemini CLI provider.
 	describe("Google Gemini CLI Provider Abort", () => {
 		it.skipIf(!geminiCliToken)(
 			"should abort mid-stream",

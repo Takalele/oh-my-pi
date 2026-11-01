@@ -10,7 +10,6 @@ import {
 	type ImageGenerationResult,
 	isImageGenerationApi,
 	type Model,
-	parseAntigravityCredentials,
 } from "@oh-my-pi/pi-ai";
 import { ProviderHttpError } from "@oh-my-pi/pi-ai/error";
 import { getEffectiveTokenCost } from "@oh-my-pi/pi-catalog/models";
@@ -273,10 +272,6 @@ export const imageGenTool: CustomTool<typeof imageGenSchema, ImageGenToolDetails
 				const initialKey = await ctx.modelRegistry.getApiKey(model, sessionId, { signal: requestSignal });
 				if (!isAuthenticated(initialKey)) {
 					skipped.push(`${model.provider}/${model.id} (credentials unavailable)`);
-					continue;
-				}
-				if (model.api === "google-gemini-cli" && !parseAntigravityCredentials(initialKey)) {
-					skipped.push(`${model.provider}/${model.id} (invalid credentials)`);
 					continue;
 				}
 

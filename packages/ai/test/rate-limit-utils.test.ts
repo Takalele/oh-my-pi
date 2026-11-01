@@ -306,8 +306,8 @@ describe("parseRateLimitReason", () => {
 		).toBe("QUOTA_EXHAUSTED");
 	});
 
-	it("classifies Antigravity capacity-exhausted as QUOTA_EXHAUSTED, not transient MODEL_CAPACITY", () => {
-		// Antigravity returns "You have exhausted your capacity on this model. Your
+	it("classifies Google capacity-exhausted as QUOTA_EXHAUSTED, not transient MODEL_CAPACITY", () => {
+		// Cloud Code Assist returns "You have exhausted your capacity on this model. Your
 		// quota will reset after 3h6m38s." The literal "capacity" used to win the
 		// classifier race and land in MODEL_CAPACITY_EXHAUSTED (45-75s backoff),
 		// blocking the agent from rotating to another OAuth account even though the
@@ -626,7 +626,7 @@ describe("isUsageLimit", () => {
 		expect(isUsageLimit(message)).toBe(true);
 	});
 
-	it("detects Antigravity capacity-exhausted message as a usage-limit error", () => {
+	it("detects Google capacity-exhausted message as a usage-limit error", () => {
 		// Without this branch `markUsageLimitReached` is never invoked, so the
 		// session sticks to the exhausted OAuth account instead of rotating —
 		// see `agent-session.ts` line 8314 and `auth-storage.ts` line 3457.
@@ -637,13 +637,13 @@ describe("isUsageLimit", () => {
 		).toBe(true);
 	});
 
-	// Antigravity / Cloud Code Assist returns this phrasing for an exhausted
+	// Cloud Code Assist returns this phrasing for an exhausted
 	// project quota; `parseRateLimitReason` already maps it to QUOTA_EXHAUSTED
 	// via the generic `quota` substring, but `isUsageLimitError` decides
 	// whether the auth layer rotates to a sibling OAuth credential, so it
 	// must match too — otherwise the session stays pinned to the exhausted
 	// account (see issue #2198).
-	it("detects Antigravity 'Individual quota reached' as a credential-rotatable usage limit", () => {
+	it("detects Google 'Individual quota reached' as a credential-rotatable usage limit", () => {
 		expect(
 			isUsageLimit(
 				"Cloud Code Assist API error (429): Individual quota reached. Contact your administrator to enable overages.",

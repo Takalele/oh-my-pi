@@ -2,7 +2,6 @@ import { extractRetryHint } from "@oh-my-pi/pi-utils/fetch-retry";
 
 /**
  * Rate limit reason classification and backoff calculation utilities.
- * Ported from opencode-antigravity-auth plugin for consistency.
  */
 
 export type RateLimitReason =
@@ -132,7 +131,7 @@ const TPM_RPM_THROTTLE_PATTERN =
 const GOOGLE_RPC_ERROR_INFO_TYPE = "type.googleapis.com/google.rpc.ErrorInfo";
 const GOOGLE_RPC_QUOTA_FAILURE_TYPE = "type.googleapis.com/google.rpc.QuotaFailure";
 const GOOGLE_RPC_RETRY_INFO_TYPE = "type.googleapis.com/google.rpc.RetryInfo";
-const ANTIGRAVITY_MODEL_QUOTA_PATTERN = /\bexhausted your capacity on this model\b/i;
+const GOOGLE_MODEL_QUOTA_PATTERN = /\bexhausted your capacity on this model\b/i;
 const LONG_RATE_LIMIT_DELAY_MS = 5 * 60 * 1000;
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -188,8 +187,8 @@ function parseGoogleRpcRateLimitReason(errorMessage: string): RateLimitReason | 
 				// Cloud Code Assist also uses this reason for an account's
 				// per-model quota, even when that quota resets within seconds.
 				if (
-					(typeof error.message === "string" && ANTIGRAVITY_MODEL_QUOTA_PATTERN.test(error.message)) ||
-					ANTIGRAVITY_MODEL_QUOTA_PATTERN.test(errorMessage)
+					(typeof error.message === "string" && GOOGLE_MODEL_QUOTA_PATTERN.test(error.message)) ||
+					GOOGLE_MODEL_QUOTA_PATTERN.test(errorMessage)
 				) {
 					return "QUOTA_EXHAUSTED";
 				}
@@ -260,8 +259,8 @@ function isQuotaExhaustedReason(reason: RateLimitReason): boolean {
 /**
  * Classify a rate-limit error message into a reason category.
  * Priority order: explicit details in a resource-exhausted error > QUOTA
- * (Antigravity "quota will reset") > CN quota > DASHSCOPE_TOKEN_LIMIT (TPM/TPS
- * throttle) > CONCURRENT_LIMIT > MODEL_CAPACITY > QUOTA (account) > RATE_LIMIT
+ * (Cloud Code Assist "quota will reset") > CN quota > DASHSCOPE_TOKEN_LIMIT
+ * (TPM/TPS throttle) > CONCURRENT_LIMIT > MODEL_CAPACITY > QUOTA (account) > RATE_LIMIT
  * (including TPM/RPM rolling windows) > QUOTA (generic) > SERVER_ERROR > bare
  * resource-exhausted > UNKNOWN.
  *
@@ -275,7 +274,7 @@ export function parseRateLimitReason(errorMessage: string): RateLimitReason {
 	const lower = lowerWithStatus.replace(RESOURCE_EXHAUSTED_PATTERN, "");
 	const hasResourceExhaustedStatus = lower !== lowerWithStatus;
 
-	// Antigravity / Cloud Code Assist surface multi-hour daily-quota exhaustion as
+	// Cloud Code Assist surfaces multi-hour daily-quota exhaustion as
 	// "You have exhausted your capacity on this model. Your quota will reset after …".
 	// The literal "capacity" used to pre-empt the QUOTA branch even though "quota
 	// will reset" is the long-wait signal — short-circuit here before the

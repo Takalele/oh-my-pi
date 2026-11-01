@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- Removed Google Antigravity sign-in, usage reporting, image generation, and the `providers.antigravityEndpoint` setting for Antigravity ToS compliance; `google-gemini-cli` (Cloud Code Assist) is unaffected.
+
 ## [18.14.1] - 2026-10-31
 
 ### Added

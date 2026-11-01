@@ -566,10 +566,10 @@ retry:
          - google-vertex/gemini-3-pro
       # A `provider/*` KEY covers every model of a provider — current or
       # future. A `provider/*` ENTRY keeps the failing model's id and swaps
-      # the provider: google-antigravity/x -> google/x -> google-vertex/x.
+      # the provider: google-gemini-cli/x -> google/x -> google-vertex/x.
       # Ids missing on the target provider are skipped (near-miss ids resolve
       # fuzzily); exact model keys override the wildcard for a specific model.
-      google-antigravity/*:
+      google-gemini-cli/*:
          - google/*
          - google-vertex/*
 

@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
-import { AuthStorage, type FetchImpl, type Model, SqliteAuthCredentialStore } from "@oh-my-pi/pi-ai";
+import { AuthStorage, Effort, type FetchImpl, type Model, SqliteAuthCredentialStore } from "@oh-my-pi/pi-ai";
 import { buildModel } from "@oh-my-pi/pi-catalog/build";
 import { getBundledModel } from "@oh-my-pi/pi-catalog/models";
 import { serializeCloudflareCredential } from "@oh-my-pi/pi-catalog/wire/cloudflare";
@@ -46,6 +46,23 @@ function geminiOAuthModel(id: string): Model<"google-gemini-cli"> {
 		contextWindow: 1_000_000,
 		maxTokens: 65_536,
 	});
+}
+
+/** Effort-tier family with baked wire-id routing, as discovery collapse produces. */
+function collapsedOAuthModel(): Model<"google-gemini-cli"> {
+	return {
+		...getBundledModel<"google-gemini-cli">("google-gemini-cli", "gemini-3-pro-preview"),
+		thinking: {
+			efforts: [Effort.Low, Effort.High],
+			mode: "google-level",
+			requiresEffort: true,
+			effortRouting: {
+				off: "gemini-3-pro-preview-low",
+				[Effort.Low]: "gemini-3-pro-preview-low",
+				[Effort.High]: "gemini-3-pro-preview-high",
+			},
+		},
+	};
 }
 
 const developerModel = geminiDeveloperModel("gemini-2.5-flash");
@@ -285,20 +302,20 @@ describe("searchGemini tools serialization", () => {
 
 	it("uses the collapsed OAuth model's default wire id", async () => {
 		const fetchMock = mockGeminiFetch();
-		const selectedModel = getBundledModel("google-antigravity", "gemini-3.8-flash");
+		const selectedModel = collapsedOAuthModel();
 		await searchGemini({
 			...makeParams("collapsed OAuth model", selectedModel),
 			fetch: fetchMock,
 		});
 
 		expect(capturedRequest?.body).toMatchObject({
-			model: "gemini-3.8-flash-low",
+			model: "gemini-3-pro-preview-low",
 		});
 	});
 
 	it("routes an explicit thinking level to the matching OAuth wire id", async () => {
 		const fetchMock = mockGeminiFetch();
-		const selectedModel = getBundledModel("google-antigravity", "gemini-3.8-flash");
+		const selectedModel = collapsedOAuthModel();
 		await searchGemini({
 			...makeParams("collapsed OAuth model", selectedModel),
 			thinkingLevel: ThinkingLevel.High,
@@ -306,13 +323,13 @@ describe("searchGemini tools serialization", () => {
 		});
 
 		expect(capturedRequest?.body).toMatchObject({
-			model: "gemini-3.8-flash-high",
+			model: "gemini-3-pro-preview-high",
 		});
 	});
 
 	it("clamps an unsupported thinking level onto the nearest routed wire id", async () => {
 		const fetchMock = mockGeminiFetch();
-		const selectedModel = getBundledModel("google-antigravity", "gemini-3.8-flash");
+		const selectedModel = collapsedOAuthModel();
 		await searchGemini({
 			...makeParams("collapsed OAuth model", selectedModel),
 			thinkingLevel: ThinkingLevel.XHigh,
@@ -320,7 +337,7 @@ describe("searchGemini tools serialization", () => {
 		});
 
 		expect(capturedRequest?.body).toMatchObject({
-			model: "gemini-3.8-flash-high",
+			model: "gemini-3-pro-preview-high",
 		});
 	});
 
@@ -414,14 +431,14 @@ describe("searchGemini tools serialization", () => {
 		).rejects.toThrow("Gemini API returned an empty grounded response");
 	});
 
-	it("does not tag Antigravity search requests with the requestType that draws false 429 quota errors", async () => {
+	it("does not tag Cloud Code search requests with the requestType that draws false 429 quota errors", async () => {
 		const fetchMock = mockGeminiFetch();
 		await searchGemini({
-			...makeParams("antigravity search", getBundledModel("google-antigravity", "gemini-3.8-flash")),
+			...makeParams("gemini cli search"),
 			fetch: fetchMock,
 		});
 
-		expect(capturedRequest?.body?.userAgent).toBe("antigravity");
+		expect(capturedRequest?.body?.userAgent).toStartWith("omp/");
 		expect(capturedRequest?.body?.requestType).toBeUndefined();
 	});
 });

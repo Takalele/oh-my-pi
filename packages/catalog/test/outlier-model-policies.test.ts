@@ -33,7 +33,6 @@ describe("outlier catalog policies", () => {
 	test("hosted seeds retain the kinds required by their dedicated runners", () => {
 		const cases = [
 			["openai-codex", "gpt-image-2", "image"],
-			["google-antigravity", "gemini-3-pro-image", "image"],
 			["deepinfra", "black-forest-labs/FLUX-2-pro", "image"],
 			["deepinfra", "hexgrad/Kokoro-82M", "tts"],
 			["xai", "grok-tts", "tts"],
@@ -47,26 +46,18 @@ describe("outlier catalog policies", () => {
 		}
 	});
 
-	test("discovered Antigravity image SKUs build as image models while sibling Flash SKUs stay chat", () => {
-		// Antigravity discovery emits image SKUs as text-only rows without a kind.
-		const image = buildModel(chatSpec("google-antigravity", "google-gemini-cli", "gemini-3.1-flash-image"));
-		const chat = buildModel(chatSpec("google-antigravity", "google-gemini-cli", "gemini-3.1-flash-lite"));
-		expect(image.kind).toBe("image");
-		expect(chat.kind).toBeUndefined();
-	});
-
 	test("chat providers carry their grounding capability", () => {
 		const cases = [
-			["google", "google-generative-ai", "gemini"],
-			["google-antigravity", "google-gemini-cli", "gemini"],
-			["anthropic", "anthropic-messages", "anthropic"],
-			["openai-codex", "openai-codex-responses", "codex"],
-			["xai", "openai-responses", "xai"],
-			["xai-oauth", "openai-responses", "xai"],
-			["openrouter", "openrouter", "openrouter"],
+			["google", "google-generative-ai", "gemini", "gemini-3.5-flash"],
+			["google-gemini-cli", "google-gemini-cli", "gemini", "gemini-3.5-flash"],
+			["anthropic", "anthropic-messages", "anthropic", "policy-probe"],
+			["openai-codex", "openai-codex-responses", "codex", "policy-probe"],
+			["xai", "openai-responses", "xai", "policy-probe"],
+			["xai-oauth", "openai-responses", "xai", "policy-probe"],
+			["openrouter", "openrouter", "openrouter", "policy-probe"],
 		] as const;
-		for (const [provider, api, grounding] of cases) {
-			expect(buildModel(chatSpec(provider, api)).webSearch).toBe(grounding);
+		for (const [provider, api, grounding, id] of cases) {
+			expect(buildModel(chatSpec(provider, api, id)).webSearch, `${provider}/${id}`).toBe(grounding);
 		}
 	});
 

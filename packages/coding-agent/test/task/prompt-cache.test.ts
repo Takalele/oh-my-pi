@@ -151,7 +151,14 @@ describe("task sibling prompt-cache routing", () => {
 		],
 		["Luna keeps child keys", "openai-codex", "gpt-6-luna", "explicit-parent", "automatic-parent", undefined],
 		["OpenAI keeps child keys", "openai", "gpt-5.4", undefined, undefined, undefined],
-		["Gemini omits cache keys", "google-antigravity", "gemini-3.8-flash", "explicit-parent", undefined, undefined],
+		[
+			"Gemini omits cache keys",
+			"google-gemini-cli",
+			"gemini-3-flash-preview",
+			"explicit-parent",
+			undefined,
+			undefined,
+		],
 		[
 			// Unopted-parent rows: the parent never opts into task caching, yet an
 			// agent override onto an eligible lane must still mint one family key
@@ -268,7 +275,6 @@ describe("task sibling prompt-cache routing", () => {
 								context,
 								"test-project",
 								cacheOptions,
-								true,
 							);
 							wireKey = JSON.stringify(request).includes('"prompt_cache_key"');
 						}
@@ -333,7 +339,7 @@ describe("task sibling prompt-cache routing", () => {
 				expect(requests[0]?.state).not.toBe(requests[1]?.state);
 				if (model.api !== "openai-completions" && model.api !== "anthropic-messages") {
 					expect(requests.map(request => request.wireKey)).toEqual(
-						provider === "google-antigravity"
+						model.api === "google-gemini-cli"
 							? [false, false]
 							: requests.map(request => expected ?? request.sessionId),
 					);

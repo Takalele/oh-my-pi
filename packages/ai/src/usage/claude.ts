@@ -929,8 +929,8 @@ export const claudeRankingStrategy: CredentialRankingStrategy = {
 	scopeLimitsForReserve: scopeClaudeLimitsForModel,
 	/**
 	 * Fable/Mythos usage-limit errors map to tier-local weekly counters. Scope
-	 * reactive backoff blocks for those tiers, mirroring the per-counter
-	 * precedent in packages/ai/src/usage/google-antigravity.ts:466-497.
+	 * reactive backoff blocks for those tiers so an exhausted tier blocks only
+	 * requests of that kind, not the whole credential.
 	 */
 	blockScope(context) {
 		const kind = getClaudeModelKind(context);

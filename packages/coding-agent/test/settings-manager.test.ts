@@ -1823,7 +1823,6 @@ describe("Settings", () => {
 		const webExaCandidates = ["web/exa", ...MODEL_PRIO.web.filter(selector => selector !== "web/exa")];
 		const webOrderedHead = [
 			"google-gemini-cli/gemini-2.5-flash",
-			"google-antigravity/gemini-2.5-flash",
 			"google/gemini-2.5-flash",
 			"anthropic/claude-haiku-4-5",
 			"openai-codex/gpt-6-luna",
@@ -1839,7 +1838,6 @@ describe("Settings", () => {
 		const imageOrderedHead = [
 			"openai/gpt-image-2",
 			"openai-codex/gpt-image-2",
-			"google-antigravity/gemini-3-pro-image",
 			"xai/grok-imagine-image",
 			"openrouter/google/gemini-3-pro-image",
 			"google/gemini-3-pro-image",
@@ -1872,7 +1870,7 @@ describe("Settings", () => {
 			[
 				"image order",
 				"providers.imageOrder",
-				["openai", "openai-codex", "antigravity", "xai", "openrouter", "gemini", "deepinfra"],
+				["openai", "openai-codex", "xai", "openrouter", "gemini", "deepinfra"],
 				{ image: imageOrderedCandidates[0] },
 				{ image: imageOrderedCandidates.slice(1) },
 			],
@@ -2004,8 +2002,8 @@ describe("Settings", () => {
 
 			expect([settings.getModelRole("web"), ...cfgRetryFallbackChains.get(settings).web.slice(0, 2)]).toEqual([
 				"google-gemini-cli/gemini-3.8-flash-high",
-				"google-antigravity/gemini-3.8-flash-high",
 				"google/gemini-3.8-flash-high",
+				"web/parallel",
 			]);
 		});
 

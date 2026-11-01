@@ -33,7 +33,6 @@ export type KnownProvider =
 	| "gitlab-duo-agent"
 	| "gmi-cloud"
 	| "google"
-	| "google-antigravity"
 	| "google-gemini-cli"
 	| "google-vertex"
 	| "groq"

@@ -9,7 +9,7 @@ function createModel(id: string): Model<"google-gemini-cli"> {
 		id,
 		name: id,
 		api: "google-gemini-cli",
-		provider: "google-antigravity",
+		provider: "google-gemini-cli",
 		baseUrl: "https://example.com",
 		reasoning: false,
 		input: ["text"],

@@ -178,7 +178,7 @@ export function buildProviderCards(
 		for (const report of providerReports) {
 			for (const limit of report.limits) {
 				const label = formatLimitTitle(limit);
-				// Distinct buckets can share a label and window (Antigravity's Gemini
+				// Distinct buckets can share a label and window (a provider's Gemini
 				// vs Gemini (Argon) weekly) and must not average into one row, so the
 				// id joins the key. The label and window stay in it too: some
 				// providers build ids positionally or per plan (kimi's `${index}`,
@@ -221,7 +221,7 @@ export function buildProviderCards(
 		);
 		const windows = [...declared.filter(row => visible.has(row)), ...declared.filter(row => !visible.has(row))];
 		// The window tag earns its columns only when sibling rows would otherwise
-		// be indistinguishable (e.g. Antigravity's daily vs weekly "Usage (Google)").
+		// be indistinguishable (e.g. a provider's daily vs weekly "Usage (Google)").
 		for (const window of windows) {
 			const duplicated = windows.some(other => other !== window && other.label === window.label);
 			if (!duplicated) window.windowTag = undefined;

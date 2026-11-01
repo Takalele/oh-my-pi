@@ -115,7 +115,7 @@ describe("auth-broker migrate", () => {
 
 	test.each([
 		{
-			provider: "google-antigravity",
+			provider: "google-gemini-cli",
 			shared: "project",
 			identity: { projectId: "aicode-consumers" },
 			local: ["alice@gmail.com", "bob@gmail.com"],
@@ -169,7 +169,7 @@ describe("auth-broker migrate", () => {
 			// Only the local row carries an account id, so the store keys the two apart:
 			// uploading would add a second row for the same account.
 			held: "a row keyed by email while the local one is keyed by account",
-			provider: "google-antigravity",
+			provider: "google-gemini-cli",
 			onBroker: { email: "alice@gmail.com", projectId: "aicode-consumers" },
 			local: { email: "alice@gmail.com", accountId: "acct-4444", projectId: "aicode-consumers" },
 		},

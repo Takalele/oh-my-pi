@@ -50,7 +50,7 @@ const RetrieveUserQuotaResponseSchema = type({
 });
 
 /**
- * Options for the Gemini CLI quota-based discovery fallback.
+ * Options for the Gemini CLI quota-based discovery.
  */
 export interface FetchGeminiCliQuotaModelsOptions {
 	/** OAuth access token sent as `Authorization: Bearer <token>`. */
@@ -71,11 +71,9 @@ export interface FetchGeminiCliQuotaModelsOptions {
  * Discovers the Gemini models available to a `google-gemini-cli` credential via
  * the account's own `retrieveUserQuota` endpoint on Cloud Code Assist.
  *
- * This is the fallback for accounts whose credential is not authorized for the
- * Antigravity `fetchAvailableModels` endpoint (e.g. Gemini Code Assist Standard
- * tiers, which return HTTP 403 there). Quota buckets carry only model ids, so
- * metadata is filled from the bundled catalog where the id is known and
- * synthesized with Gemini CLI defaults otherwise.
+ * Quota buckets carry only model ids, so metadata is filled from the bundled
+ * catalog where the id is known and synthesized with Gemini CLI defaults
+ * otherwise.
  *
  * Returns `null` on network/payload/auth failure (the caller keeps the bundled
  * catalog). Returns `[]` when the quota response lists no usable Gemini models.

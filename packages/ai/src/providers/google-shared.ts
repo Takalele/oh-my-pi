@@ -263,12 +263,11 @@ export function convertMessages<T extends GoogleApiType>(model: Model<T>, contex
 			const parts: Part[] = [];
 			// Check if message is from same provider and model - only then keep thinking blocks
 			const isSameProviderAndModel = msg.provider === model.provider && msg.model === model.id;
-			const dropsUnsignedThinking = model.compat.dropUnsignedThinking;
 			let isFirstToolCall = true;
 
 			for (const block of msg.content) {
 				if (block.type === "text") {
-					// Skip empty text blocks - they can cause issues with some models (e.g. Claude via Antigravity)
+					// Skip empty text blocks - they can cause issues with some models (e.g. Claude via Cloud Code Assist)
 					if (!block.text || block.text.trim() === "") continue;
 					const thoughtSignature = resolveThoughtSignature(isSameProviderAndModel, block.textSignature);
 					parts.push({
@@ -279,7 +278,6 @@ export function convertMessages<T extends GoogleApiType>(model: Model<T>, contex
 					const thoughtSignature = resolveThoughtSignature(isSameProviderAndModel, block.thinkingSignature);
 					// Skip empty thinking unless it carries the signature of a signature-only thought part
 					if ((!block.thinking || block.thinking.trim() === "") && !thoughtSignature) continue;
-					if (dropsUnsignedThinking && !thoughtSignature) continue;
 					if (isSameProviderAndModel) {
 						// The model's own thinking replays in the thought slot even unsigned: Gemini
 						// signs the part after a thought summary, not the summary, and replayed as
@@ -340,8 +338,8 @@ export function convertMessages<T extends GoogleApiType>(model: Model<T>, contex
 			const hasImages = imageContent.length > 0;
 
 			// Gemini 3+ models support multimodal function responses with images nested inside
-			// functionResponse.parts. Claude and other non-Gemini models behind Cloud Code Assist /
-			// Antigravity also accept this shape. Gemini < 3 still needs a separate user image turn.
+			// functionResponse.parts. Claude and other non-Gemini models behind Cloud
+			// Code Assist also accept this shape. Gemini < 3 still needs a separate user image turn.
 			const modelSupportsMultimodalFunctionResponse = model.compat.multimodalFunctionResponse;
 
 			// Use "output" key for success, "error" key for errors as per SDK documentation
@@ -493,7 +491,7 @@ export function mapStopReasonString(reason: string): StopReason {
  * Bounded retries for the well-known Gemini "empty response" failure: a benign
  * `finishReason: STOP` carrying only an empty/whitespace text part and no tool call.
  * Shared by the public/Vertex `streamGoogleGenAI` path and the Cloud Code Assist
- * (`google-gemini-cli`/`google-antigravity`) provider so both apply the same policy.
+ * (`google-gemini-cli`) provider so both apply the same policy.
  */
 export const MAX_EMPTY_STREAM_RETRIES = 2;
 export const EMPTY_STREAM_BASE_DELAY_MS = 500;
@@ -536,7 +534,7 @@ function resetGoogleStreamOutputForRetry(output: AssistantMessage): void {
  * `promptTokenCount` includes `cachedContentTokenCount`, so input = prompt − cached,
  * matching the OpenAI convention where input + cacheRead = total prompt tokens.
  * Upstream sometimes omits `promptTokenCount` or reports a cache count above the
- * prompt (Antigravity), so the prompt falls back to `total − candidates − thoughts`
+ * prompt (Cloud Code Assist), so the prompt falls back to `total − candidates − thoughts`
  * and cached tokens are clamped to it: input is never negative.
  * Ref: https://ai.google.dev/api/generate-content#v1beta.GenerateContentResponse.UsageMetadata
  */

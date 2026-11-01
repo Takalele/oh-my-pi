@@ -3616,24 +3616,6 @@ describe("ModelRegistry", () => {
 			expect(vertexAuthoritative.find("google-vertex", "gemini-1.5-pro")).toBeUndefined();
 		});
 
-		test("does not offer bundled Antigravity chat ids absent from a fresh account roster after restart", () => {
-			const served = getBundledModels("google-antigravity").find(model => model.id === "claude-sonnet-4-6");
-			if (!served) throw new Error("Missing bundled Antigravity control model");
-			writeModelCache(
-				"google-antigravity",
-				Date.now(),
-				[served],
-				true,
-				fingerprintStaticModels(getBundledModels("google-antigravity"), true),
-				path.join(tempDir, "models.db"),
-			);
-			const restarted = new ModelRegistry(authStorage, modelsJsonPath);
-
-			expect(restarted.find("google-antigravity", "claude-sonnet-4-6")).toBeDefined();
-			expect(restarted.find("google-antigravity", "claude-sonnet-5-5")).toBeUndefined();
-			expect(restarted.find("google-antigravity", "gemini-3-pro-image")).toBeDefined();
-		});
-
 		test("does not re-add bundled synthetic models after authoritative cache load", () => {
 			const syntheticModels = getModelsForProvider(syntheticCacheLoad, "synthetic");
 			expect(syntheticModels.map(model => model.id)).toEqual(["hf:zai-org/GLM-5.1"]);
@@ -3721,7 +3703,7 @@ describe("ModelRegistry", () => {
 
 	describe("effort-tier variant collapsing", () => {
 		let kiroTwins: ModelRegistry;
-		let antigravityOverride: ModelRegistry;
+		let geminiCliOverride: ModelRegistry;
 		let suppressible: ModelRegistry;
 		beforeAll(() => {
 			kiroTwins = readonlyRegistry({
@@ -3732,9 +3714,15 @@ describe("ModelRegistry", () => {
 					]),
 				},
 			});
-			antigravityOverride = readonlyRegistry({
+			geminiCliOverride = readonlyRegistry({
 				providers: {
-					"google-antigravity": { modelOverrides: { "gemini-3-pro-high": { contextWindow: 222_222 } } },
+					"google-gemini-cli": {
+						baseUrl: "https://example.com/v1",
+						api: "google-gemini-cli",
+						auth: "none",
+						models: [{ id: "gemini-3-pro", contextWindow: 128_000 }],
+						modelOverrides: { "gemini-3-pro-high": { contextWindow: 222_222 } },
+					},
 				},
 			});
 			// Dedicated instance: the suppression test mutates it via suppressSelector.
@@ -3754,15 +3742,15 @@ describe("ModelRegistry", () => {
 		});
 
 		test("modelOverrides keyed by retired variant ids re-key onto the collapsed model", () => {
-			const collapsed = antigravityOverride.find("google-antigravity", "gemini-3-pro");
+			const collapsed = geminiCliOverride.find("google-gemini-cli", "gemini-3-pro");
 			expect(collapsed?.contextWindow).toBe(222_222);
 			// The retired selector resolves to the same collapsed model.
-			expect(antigravityOverride.find("google-antigravity", "gemini-3-pro-high")?.id).toBe("gemini-3-pro");
+			expect(geminiCliOverride.find("google-gemini-cli", "gemini-3-pro-high")?.id).toBe("gemini-3-pro");
 		});
 
 		test("retired variant maximum override wins over a larger custom maximum", async () => {
 			writeRawModelsJson({
-				"google-antigravity": {
+				"google-gemini-cli": {
 					baseUrl: "https://example.com/v1",
 					api: "google-gemini-cli",
 					auth: "none",
@@ -3774,29 +3762,29 @@ describe("ModelRegistry", () => {
 			cfgExtendedContext.set(testSettings, true);
 			const registry = new ModelRegistry(authStorage, modelsJsonPath, { settings: testSettings });
 			expect(registry.getError()).toBeUndefined();
-			expect(registry.find("google-antigravity", "gemini-3-pro")?.contextWindow).toBe(512_000);
-			expect(registry.find("google-antigravity", "gemini-3-pro-high")).toMatchObject({
+			expect(registry.find("google-gemini-cli", "gemini-3-pro")?.contextWindow).toBe(512_000);
+			expect(registry.find("google-gemini-cli", "gemini-3-pro-high")).toMatchObject({
 				id: "gemini-3-pro",
 				contextWindow: 512_000,
 			});
 
 			cfgExtendedContext.set(testSettings, false);
 			await registry.reapplyModelPolicies();
-			expect(registry.find("google-antigravity", "gemini-3-pro")?.contextWindow).toBe(128_000);
+			expect(registry.find("google-gemini-cli", "gemini-3-pro")?.contextWindow).toBe(128_000);
 
 			cfgExtendedContext.set(testSettings, true);
 			await registry.reapplyModelPolicies();
 			await registry.refresh("offline");
 			expect(registry.getError()).toBeUndefined();
-			expect(registry.find("google-antigravity", "gemini-3-pro")?.contextWindow).toBe(512_000);
-			expect(registry.find("google-antigravity", "gemini-3-pro-high")?.contextWindow).toBe(512_000);
+			expect(registry.find("google-gemini-cli", "gemini-3-pro")?.contextWindow).toBe(512_000);
+			expect(registry.find("google-gemini-cli", "gemini-3-pro-high")?.contextWindow).toBe(512_000);
 		});
 
 		test("suppressed selectors keyed by retired variant ids bind to the collapsed id", () => {
-			suppressible.suppressSelector("google-antigravity/gemini-3-pro-high", Date.now() + 60_000);
-			expect(suppressible.isSelectorSuppressed("google-antigravity/gemini-3-pro")).toBe(true);
-			expect(suppressible.isSelectorSuppressed("google-antigravity/gemini-3-pro-low")).toBe(true);
-			expect(suppressible.isSelectorSuppressed("google-antigravity/gemini-2.5-pro")).toBe(false);
+			suppressible.suppressSelector("google-gemini-cli/gemini-3-pro-high", Date.now() + 60_000);
+			expect(suppressible.isSelectorSuppressed("google-gemini-cli/gemini-3-pro")).toBe(true);
+			expect(suppressible.isSelectorSuppressed("google-gemini-cli/gemini-3-pro-low")).toBe(true);
+			expect(suppressible.isSelectorSuppressed("google-gemini-cli/gemini-2.5-pro")).toBe(false);
 		});
 	});
 });

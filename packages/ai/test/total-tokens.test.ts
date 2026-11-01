@@ -23,10 +23,9 @@ const oauthTokens = await Promise.all([
 	resolveApiKey("anthropic"),
 	resolveApiKey("github-copilot"),
 	resolveApiKey("google-gemini-cli"),
-	resolveApiKey("google-antigravity"),
 	resolveApiKey("openai-codex"),
 ]);
-const [anthropicOAuthToken, githubCopilotToken, geminiCliToken, antigravityToken, openaiCodexToken] = oauthTokens;
+const [anthropicOAuthToken, githubCopilotToken, geminiCliToken, openaiCodexToken] = oauthTokens;
 
 // Generate a long system prompt to trigger caching (>2k bytes for most providers)
 const LONG_SYSTEM_PROMPT = `You are a helpful assistant. Be concise in your responses.
@@ -483,61 +482,7 @@ describe("totalTokens field", () => {
 	});
 
 	// =========================================================================
-	// Google Antigravity (OAuth)
 	// =========================================================================
-
-	describe("Google Antigravity (OAuth)", () => {
-		it.skipIf(!antigravityToken)(
-			"gemini-3.8-flash - should return totalTokens equal to sum of components",
-			async () => {
-				const llm = getBundledModel("google-antigravity", "gemini-3.8-flash");
-
-				console.log(`\nGoogle Antigravity / ${llm.id}:`);
-				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: antigravityToken });
-
-				logUsage("First request", first);
-				logUsage("Second request", second);
-
-				assertTotalTokensEqualsComponents(first);
-				assertTotalTokensEqualsComponents(second);
-			},
-			{ retry: 3, timeout: 60000 },
-		);
-
-		it.skipIf(!antigravityToken)(
-			"claude-sonnet-4-5 - should return totalTokens equal to sum of components",
-			async () => {
-				const llm = getBundledModel("google-antigravity", "claude-sonnet-4-5");
-
-				console.log(`\nGoogle Antigravity / ${llm.id}:`);
-				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: antigravityToken });
-
-				logUsage("First request", first);
-				logUsage("Second request", second);
-
-				assertTotalTokensEqualsComponents(first);
-				assertTotalTokensEqualsComponents(second);
-			},
-			{ retry: 3, timeout: 60000 },
-		);
-
-		it.skipIf(!antigravityToken)(
-			"gpt-oss-120b-medium - should return totalTokens equal to sum of components",
-			async () => {
-				const llm = getBundledModel("google-antigravity", "gpt-oss-120b-medium");
-
-				console.log(`\nGoogle Antigravity / ${llm.id}:`);
-				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: antigravityToken });
-
-				logUsage("First request", first);
-				logUsage("Second request", second);
-
-				assertTotalTokensEqualsComponents(first);
-				assertTotalTokensEqualsComponents(second);
-			},
-			{ retry: 3, timeout: 60000 },
-		);
-	});
 
 	// =========================================================================
 	// OpenAI Codex (OAuth)

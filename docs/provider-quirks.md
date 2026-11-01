@@ -226,7 +226,7 @@ Provider-specific overrides in `packages/catalog/src/compat/rules/providers/goog
 ### Stream behavior
 
 - **`streamGenerateContent` SSE protocol**: Streams are consumed via `readSseJson<GenerateContentResponse>` in `streamGoogleGenAI`.
-- **Thought parts & signature retention**: `isThinkingPart` identifies reasoning text when `part.thought === true`. `GoogleTextBlocks` folds streamed text and thought parts into blocks and keeps each `part.thoughtSignature` on the block whose part carried it, including the empty text part Gemini sends after a text reply's last chunk to sign the reply. In `convertMessages`, thought signatures are retained only when message provider/model match the target (`msg.provider === model.provider && msg.model === model.id`) and pass `isValidThoughtSignature` (base64 check); that model's own thinking replays as a `thought: true` part, signed or not, while other models' thinking arrives already demoted to text by `transformMessages`. For Gemini 3 tool calls lacking a valid signature, the public Gemini API emits the `skip_thought_signature_validator` bypass sentinel on every unsigned call. Cloud Code Assist / Antigravity emits it only when the first call of a turn is unsigned; signed-first parallel turns omit it from unsigned secondary calls. Vertex AI always omits the sentinel (#9638, #10602).
+- **Thought parts & signature retention**: `isThinkingPart` identifies reasoning text when `part.thought === true`. `GoogleTextBlocks` folds streamed text and thought parts into blocks and keeps each `part.thoughtSignature` on the block whose part carried it, including the empty text part Gemini sends after a text reply's last chunk to sign the reply. In `convertMessages`, thought signatures are retained only when message provider/model match the target (`msg.provider === model.provider && msg.model === model.id`) and pass `isValidThoughtSignature` (base64 check); that model's own thinking replays as a `thought: true` part, signed or not, while other models' thinking arrives already demoted to text by `transformMessages`. For Gemini 3 tool calls lacking a valid signature, the public Gemini API emits the `skip_thought_signature_validator` bypass sentinel on every unsigned call. Cloud Code Assist emits it only when the first call of a turn is unsigned; signed-first parallel turns omit it from unsigned secondary calls. Vertex AI always omits the sentinel (#9638, #10602).
 - **Empty response retry loop**: `streamGoogleGenAI` guards against Gemini returning `finishReason: STOP` with blank content without calling tools. `hasMeaningfulGoogleContent` validates output; if empty, `streamGoogleGenAI` retries up to `MAX_EMPTY_STREAM_RETRIES` (2 retries, 3 total attempts) with exponential backoff (`EMPTY_STREAM_BASE_DELAY_MS * 2^attempt`) after resetting stream output via `resetGoogleStreamOutputForRetry`.
 - **Thinking loop guard**: Implemented in `packages/ai/src/utils/thinking-loop.ts` (`ThinkingLoopDetector`). Gemini, DeepSeek, and Grok model-id families are monitored before tool calls for these runaway shapes:
    1. _Verbatim tail repetition_ (`EXACT_TAIL_WINDOW = 4096`, >= 180 repeated chars).
@@ -282,9 +282,9 @@ The Google Vertex AI provider enables streaming generation for Gemini models hos
 * **Catalog API Resolution**: `resolveGoogleVertexApi` in `packages/catalog/src/provider-models/openai-compat.ts` routes `@ai-sdk/google-vertex/anthropic` npm package models to `api: "anthropic-messages"` with `GOOGLE_VERTEX_ANTHROPIC_BASE_URL` (`https://{location}-aiplatform.googleapis.com/v1/projects/{project}/locations/{location}/publishers/anthropic/models/{model}:streamRawPredict`). Models with slash IDs or `@ai-sdk/openai-compatible` route to `api: "openai-completions"`. All other models route to `api: "google-vertex"` with `GOOGLE_VERTEX_BASE_URL` (`https://{location}-aiplatform.googleapis.com`).
 * **Registry Credentials Guard**: Declared in `packages/catalog/src/compat/rules/auth/google-vertex.kdl` via `env hook="google-vertex-adc"` (`packages/ai/src/registry/hooks/env.ts`). Returns `$env.GOOGLE_CLOUD_API_KEY` if set, or `AUTHENTICATED_SENTINEL` (`"<authenticated>"`) if ADC credentials exist (`hasVertexAdcCredentials()`) AND project env (`GOOGLE_CLOUD_PROJECT`/`GCP_PROJECT`/`GCLOUD_PROJECT`) AND location env (`GOOGLE_VERTEX_LOCATION`/`GOOGLE_CLOUD_LOCATION`/`VERTEX_LOCATION`) are present. Returns `undefined` otherwise, preventing models from appearing in catalog listings without proper auth.
 
-## Google Gemini CLI / Antigravity
+## Google Gemini CLI
 
-Google Cloud Code Assist (CCA) transport wrapper accessing Gemini and Claude models over `/v1internal:streamGenerateContent` SSE endpoints. Implementation spans `packages/ai/src/providers/google-gemini-cli.ts` (shared execution engine, request construction, stream parsing, and planning leak filters), `packages/catalog/src/compat/rules/auth/google-gemini-cli.kdl` & `packages/catalog/src/compat/rules/auth/google-antigravity.kdl` (auth policy declarations), `packages/ai/src/registry/oauth/google-gemini-cli.ts` & `google-antigravity.ts` (OAuth hooks, project discovery, and onboarding), `packages/ai/src/usage/google-antigravity.ts` & `packages/ai/src/usage/gemini.ts` (quota tracking and credential ranking), and `packages/catalog/src/discovery/antigravity.ts` (model catalog discovery).
+Google Cloud Code Assist (CCA) transport wrapper accessing Gemini and Claude models over `/v1internal:streamGenerateContent` SSE endpoints. Implementation spans `packages/ai/src/providers/google-gemini-cli.ts` (execution engine, request construction, stream parsing, and planning leak filters), `packages/catalog/src/compat/rules/auth/google-gemini-cli.kdl` (auth policy declarations), `packages/ai/src/registry/oauth/google-gemini-cli.ts` (OAuth hooks, project discovery, and onboarding), `packages/ai/src/usage/gemini.ts` (quota tracking), and `packages/catalog/src/discovery/gemini-cli.ts` (model catalog discovery).
 
 ### Special casings
 
@@ -292,26 +292,11 @@ Provider-specific overrides in `packages/catalog/src/compat/rules/providers/goog
 
 - For class gemini; revision >=3.0.0: `requiresSkipThoughtSignatureOnFirstFunctionCall=true`.
 
-Provider-specific overrides in `packages/catalog/src/compat/rules/providers/google-antigravity.kdl` (more-specific selectors override provider defaults):
-
-- For class anthropic; family opus: `thinking.mode="budget"`.
-- For class gemini; revision >=3.0.0: `requiresSkipThoughtSignatureOnFirstFunctionCall=true`.
-- For class gemini; family flash; revision >=3.0.0 <3.6.0: `thinking.effortBudgets={"high":10000,"low":1000,"medium":4000,"minimal":1000}`, `thinking.mode="budget"`, `thinking.suppressWhenOff=true`.
-- For class gemini; family flash; revision >=3.6.0: `thinking.mode="google-level"`, `thinking.requiresEffort=true`.
-- For class gemini; family pro; revision >=3.0.0 <3.2.0: `thinking.suppressWhenOff=true`.
-- For models claude-opus-4-6: `thinking.efforts=["minimal","low","medium","high"]`.
-- For models gemini-3-pro: `thinking.mode="google-level"`.
-- For models gemini-3.1-flash-lite: `thinking.mode="google-level"`, `thinking.requiresEffort=true`.
-- For models gemini-3.1-pro: `thinking.effortBudgets={"high":10001,"low":1001}`, `thinking.mode="budget"`.
-
 - **CCA JSON Schema Normalization**: `normalizeSchemaForCCA` (`packages/ai/src/utils/schema/normalize.ts`) recursively strips unsupported JSON Schema keywords (`propertyNames`, `additionalProperties`, `patternProperties`, `$schema`, `title`, `description`, etc.) to prevent HTTP 400 errors from CCA. Accurately tracks context inside properties named `properties` to avoid premature re-assertion of property stripping. Tools are normalized in `buildRequest` (`packages/ai/src/providers/google-gemini-cli.ts`) via `normalizeSchemaForCCA`.
 - **Provider Protocol & Request Envelope**:
-   - **Endpoints**: `google-gemini-cli` defaults to `https://cloudcode-pa.googleapis.com`. `google-antigravity` uses auto-failover across `https://daily-cloudcode-pa.googleapis.com` (primary) and `https://daily-cloudcode-pa.sandbox.googleapis.com` (sandbox), persisting `lastGoodEndpoint` in `AntigravityProviderSessionState`.
-   - **Headers & User-Agent**: `google-gemini-cli` sends `getGeminiCliHeaders()` (`GeminiCLI/0.46.0/<modelId> (platform; arch; terminal)`). `google-antigravity` requests (chat, discovery, quota, onboarding, image, web search) send `getAntigravityHeaders()`: `getAntigravityUserAgent()` (`antigravity/hub/<version> (aidev_client; os_type=<os>; arch=<arch>; cl=<cl>)`) plus `Accept-Encoding: gzip` and no explicit `Accept`, like the native Go client (Bun still adds `Accept: */*`); the backend gates newer models (e.g. gemini-3.7-flash) on the client version. `os_type`/`arch` name the native build for the host OS (`getAntigravityPlatform`: macOS `darwin`/`arm64`, Linux `linux`/`amd64`, Windows `windows`/`amd64`, the only builds Antigravity ships; other OSes report the Linux build). Reasoning Claude 4.x models on Antigravity send `anthropic-beta: interleaved-thinking-2025-05-14` (the Claude-thinking header gate); Claude 5.x sends none, like the native client, and still streams interleaved thinking.
-   - **System Instructions**: Antigravity tags system instructions with `role: "user"`. No identity prompt is injected by the client.
-   - **Request Envelope & Session State**: Antigravity wraps requests in `buildAntigravityRequestEnvelope`: `project` (projectId), `requestId` (`agent/<agentId>/<ts>/<trajectoryId>/<step>`, where `<step>` counts the conversation's steps so far, one per user turn, model turn and tool result: 1 on the first request, 3 after one tool round trip, never moving backwards), `userAgent` (`antigravity`), and `labels` (`cascade_id` and `root_cascade_id` = `agentId`, `last_execution_id`, `last_step_index` = step − 1, `model_enum`, `request_id` = `<trajectoryId>-<n>` with `n` the 0-based request count in the trajectory, `trajectory_id`, `used_claude`, `used_claude_conservative`, `used_non_gemini_model`). `requestType` is omitted; the official client sends `requestType: "agent"`, but omp omits it because it draws false 429 `RESOURCE_EXHAUSTED` errors. State maintains the monotonic `stepIndex`, the request counter, persistent `agentId`, `trajectoryId`, and signed-decimal `sessionId` (`deriveAntigravitySessionId`).
-   - **Wire Profiles**: each Antigravity SKU's request constants come from the account's `fetchAvailableModels` roster: discovery records `model` (the `model_enum` label), `maxOutputTokens`, `thinkingLevel` (1/2/3 → `LOW`/`MEDIUM`/`HIGH`) and `thinkingBudget` per wire ID in `Model.antigravityWireProfiles`, and collapse keeps every routed member's entry. `getAntigravityModelWireProfile` (`packages/catalog/src/wire/gemini-headers.ts`) reads that map, falling back to `ANTIGRAVITY_MODEL_WIRE_PROFILES` for rows that predate discovery profiles (the bundled snapshot). The output cap is always sent. Claude 4.6 wire IDs cap `maxOutputTokens` at `64000` (backend rejects >64000 with 400).
-- **Thinking Configuration & Wire Suppression**: Gemini 2.x models send `thinkingConfig.thinkingBudget`, while Gemini 3 models send `thinkingConfig.thinkingLevel`. On Antigravity, a tier SKU (a family routing efforts to two or more distinct SKUs: Gemini 3.8 Flash, Gemini 4 Argon, Claude 5.5) sends the thinking setting the SKU advertises, like the native client: its level when it has one, else its budget (`-1` is dynamic). Families routing every effort to one SKU (GPT-OSS, Gemini 2.5 Flash, Claude 4.5) keep the effort's own budget. When reasoning is disabled for models with `thinking.suppressWhenOff`, `buildRequest` emits explicit wire suppression (`includeThoughts: false` with level/budget). Omitting `thinkingConfig` causes CCA to re-apply server defaults and silently bill thinking tokens.
+   - **Endpoints**: `google-gemini-cli` defaults to `https://cloudcode-pa.googleapis.com`.
+   - **Headers & User-Agent**: `google-gemini-cli` sends `getGeminiCliHeaders()` (`GeminiCLI/0.46.0/<modelId> (platform; arch; terminal)`).
+- **Thinking Configuration & Wire Suppression**: Gemini 2.x models send `thinkingConfig.thinkingBudget`, while Gemini 3 models send `thinkingConfig.thinkingLevel`. When reasoning is disabled for models with `thinking.suppressWhenOff`, `buildRequest` emits explicit wire suppression (`includeThoughts: false` with level/budget). Omitting `thinkingConfig` causes CCA to re-apply server defaults and silently bill thinking tokens.
 
 ### Stream behavior
 
@@ -324,26 +309,22 @@ Provider-specific overrides in `packages/catalog/src/compat/rules/providers/goog
 
 ### Auth & usage
 
-- **Credential Model & Token Expiry**: Credentials stored as JSON (`parseGeminiCliCredentials`): `{ token, projectId, refreshToken, expiresAt, email }`. AuthStorage is the sole refresh authority. `shouldRefreshGeminiCliCredentials` checks token expiry with a 60s skew (`ANTIGRAVITY_REFRESH_SKEW_MS` / `GOOGLE_GEMINI_REFRESH_SKEW_MS`). Stale tokens fail fast before making HTTP requests.
-- **OAuth Installed-App Flow**: Callback ports are `8085` (`google-gemini-cli`, `/oauth2callback`) and `51121` (`google-antigravity`, `/oauth-callback`). Supports paste code flow (`pasteCodeFlow: true`). Authorizes via Google OAuth 2.0 (`accounts.google.com/o/oauth2/v2/auth`); `google-antigravity` sends S256 PKCE like the native client. Antigravity scopes are `cloud-platform`, `userinfo.email`, `userinfo.profile`, `cclog`, `experimentsandconfigs`, and `aicode`.
+- **Credential Model & Token Expiry**: Credentials stored as JSON (`parseGeminiCliCredentials`): `{ token, projectId, refreshToken, expiresAt, email }`. AuthStorage is the sole refresh authority. `shouldRefreshGeminiCliCredentials` checks token expiry with a 60s skew (`GOOGLE_GEMINI_REFRESH_SKEW_MS`). Stale tokens fail fast before making HTTP requests.
+- **OAuth Installed-App Flow**: Callback port is `8085` (`google-gemini-cli`, `/oauth2callback`). Supports paste code flow (`pasteCodeFlow: true`). Authorizes via Google OAuth 2.0 (`accounts.google.com/o/oauth2/v2/auth`); `google-gemini-cli` sends S256 PKCE. Requested scopes are `cloud-platform`, `userinfo.email`, and `userinfo.profile`.
 - **Project Discovery & Onboarding**:
    - `google-gemini-cli` (`packages/catalog/src/compat/rules/auth/google-gemini-cli.kdl`, hook in `packages/ai/src/registry/oauth/google-gemini-cli.ts`): calls `POST /v1internal:loadCodeAssist` with `$GOOGLE_CLOUD_PROJECT` fallback. If project absent, calls `POST /v1internal:onboardUser` with `tierId` (`free-tier`, `legacy-tier`, `standard-tier`) and polls `LongRunningOperationResponse` via `pollOperation` (up to `POLL_MAX_ATTEMPTS = 24` at 5s intervals). Detects VPC-SC restriction (`SECURITY_POLICY_VIOLATED`).
-   - `google-antigravity` (`packages/catalog/src/compat/rules/auth/google-antigravity.kdl`, hook in `packages/ai/src/registry/oauth/google-antigravity.ts`): mirrors the native `antigravity/hub` flow against `https://daily-cloudcode-pa.googleapis.com`: `loadCodeAssist` requests carry `{ metadata: { ideType: "ANTIGRAVITY" } }`, repeat with `cloudaicompanionProject` when the response lacks `paidTier`, and refresh after resolving the account state. Accounts without `currentTier` are provisioned once with `onboardUser` and `tierId: "free-tier"`; its long-running operation is polled with `GET /v1internal/{operation.name}` every second under one 30-second deadline.
-- **Usage & Quota Tracking (`google-antigravity`)**: `antigravityUsageProvider` (`packages/ai/src/usage/google-antigravity.ts`) queries `POST /v1internal:fetchAvailableModels`. Normalizes quota buckets into daily (24h) and weekly (7d) windows. Deduplicates quotas into backend counter keys (`Anthropic`, `Google`, `OpenAI`). `antigravityRankingStrategy` scopes ranking by requested model family (`getAntigravityCounterKeyForModel`: `claude-` → Anthropic, `gemini-`/`gemma-` → Google, `gpt-`/`openai/` → OpenAI), selecting stored OAuth credentials with available quota headroom.
 - **Usage & Quota Tracking (`google-gemini-cli`)**: `googleGeminiCliUsageProvider` (`packages/ai/src/usage/gemini.ts`) queries `loadCodeAssist` and `retrieveUserQuota`, surfacing quota percentages per model tier (`3-Flash`, `Flash`, `Pro`).
 
 ### Catalog model handling
 
 - **Provider entry (`google-gemini-cli`)**: `packages/catalog/src/compat/rules/providers/google-gemini-cli.kdl` declares default model `gemini-3.1-pro-preview`.
-- **Provider entry (`google-antigravity`)**: `packages/catalog/src/compat/rules/providers/google-antigravity.kdl` declares default model `gemini-3.1-pro`.
 - **Authored seeds**: `gemini-3-pro-image`; bundle policy `always`. Limits, capabilities, and prices are authored alongside these rows.
-- **Model Resolution & Discovery**: `googleAntigravityModelManagerOptions` & `googleGeminiCliModelManagerOptions` (`packages/catalog/src/provider-models/google.ts`) invoke `fetchAntigravityDiscoveryModels` (`packages/catalog/src/discovery/antigravity.ts`), which posts `{ project }` to `fetchAvailableModels` when the account's project is known (`{}` otherwise), as the native client does.
+- **Model Resolution & Discovery**: `googleGeminiCliModelManagerOptions` (`packages/catalog/src/provider-models/google.ts`) invokes `fetchGeminiCliQuotaModels` (`packages/catalog/src/discovery/gemini-cli.ts`), which posts `{ project }` to `retrieveUserQuota` when the account's project is known (`{}` otherwise).
 - **Variant Collapsing**: Effort-tier variants are collapsed into logical specs at discovery (`packages/catalog/src/compat/collapse.ts`):
-   - `gemini-3.5-flash`: collapses `gemini-3.5-flash-extra-low`, `gemini-3.5-flash-low`, `gemini-3-flash-agent`. Antigravity budget mode maps Minimal/Low → `extra-low` (1000 tokens), Medium → `low` (4000 tokens), High → `agent` (10000 tokens). Gemini CLI maps to level transport. Alias: `gemini-3-flash`. Antigravity retired these wire ids while its roster still lists them, so `exclude-models` drops `gemini-3.5-flash` and `gemini-3-flash` from that provider's discovery and bundle.
+   - `gemini-3.5-flash`: collapses `gemini-3.5-flash-extra-low`, `gemini-3.5-flash-low`, `gemini-3-flash-agent`. Gemini CLI maps to level transport. Alias: `gemini-3-flash`.
    - `gemini-3.6-flash`: collapses `gemini-3.6-flash-low`, `-medium`, `-high`, `-tiered` into `gemini-3.6-flash` with `google-level` mode.
    - `gemini-3.1-pro`: collapses `gemini-3.1-pro-low`, `gemini-pro-agent`, `gemini-3.1-pro-high`. High effort routes to `gemini-pro-agent` because upstream `gemini-3.1-pro-high` deployment returns INVALID_ARGUMENT on streamGenerateContent.
    - `claude-*`: bare and `-thinking` pairs collapse into `claude-*` using reviewed thinking-pair collapse (`preserveAbsentEffortRoutes: true`).
-- **Catalog Generator Integration**: `fetchAntigravityModels` (`packages/catalog/scripts/generate-models.ts`) fetches models via discovery token (falling back from `google-antigravity` to `google-gemini-cli` OAuth credentials) and fixes `baseUrl` to `https://daily-cloudcode-pa.googleapis.com`.
 
 ## Amazon Bedrock
 
@@ -1158,30 +1139,9 @@ GMI Cloud is an AI GPU infrastructure and cloud model inference provider hosting
 - **Authored seeds**: `deepseek-ai/DeepSeek-V4-Flash`; bundle policy `fallback`. Limits, capabilities, and prices are authored alongside these rows.
 - **Dynamic Model Discovery**: Configured with `catalogDiscovery: { label: "GMI Cloud" }` (`packages/catalog/src/compat/rules/providers/gmi-cloud.kdl`) to dynamically query `/v1/models` via `fetchOpenAICompatibleModels` (`packages/catalog/src/discovery/openai-compatible.ts`). When API credentials are available, live discovery results marked as authoritative overwrite cached or static entries.
 
-## Google Antigravity (`google-antigravity`)
-
-The Google Antigravity provider (`google-antigravity`) routes requests to Google Cloud Code Assist daily/sandbox endpoints (`daily-cloudcode-pa.googleapis.com`) using dedicated OAuth credentials. It provides access to Google Gemini 3.x/2.5 models as well as Anthropic Claude and OpenAI GPT-OSS models using the shared "Google Gemini CLI / Antigravity" transport (`packages/ai/src/providers/google-gemini-cli.ts`).
-
-### Special casings
-
-- **Validated Function Calling Default**: Default tool selection mode in `buildRequest` (`packages/ai/src/providers/google-gemini-cli.ts`) is `VALIDATED` (`functionCallingConfig: { mode: "VALIDATED" }`). Claude models on Antigravity always force `VALIDATED` tool mode even when no tools are declared (`packages/ai/src/providers/google-gemini-cli.ts`).
-- **System Instruction & Request Envelope**: Antigravity tags `systemInstruction` with `role: "user"` and sends the caller's prompts unmodified. `buildAntigravityRequestEnvelope` injects structured `requestId` (`agent/<id>/<ts>/<trajectoryId>/<step>`), `userAgent: "antigravity"`, `sessionId`, and `labels` (`cascade_id`, `root_cascade_id`, `request_id`, `model_enum`, `trajectory_id`, `last_step_index`, `last_execution_id`, `used_claude*`, `used_non_gemini_model`) using `getAntigravityModelWireProfile`. `requestType` is omitted (the official client sends `"agent"`, which draws false 429s).
-- **Endpoint Auto-Failover**: Operates across `ANTIGRAVITY_DAILY_ENDPOINT` (`https://daily-cloudcode-pa.googleapis.com`) and `ANTIGRAVITY_SANDBOX_ENDPOINT` (`https://daily-cloudcode-pa.sandbox.googleapis.com`) with state-tracked fallback in `getAntigravityProviderSessionState` (`packages/ai/src/providers/google-gemini-cli.ts`).
-
-### Auth & usage
-
-- **Dedicated OAuth Flow**: Declared in `packages/catalog/src/compat/rules/auth/google-antigravity.kdl` (`login "oauth-code"` rule, `packages/ai/src/registry/engine/oauth-code.ts`) with project discovery hook in `packages/ai/src/registry/oauth/google-antigravity.ts` (`googleAntigravityProjectHook`), executing an independent OAuth flow with distinct client credentials and callback port 51121. Project discovery mirrors native `antigravity/hub`: exact-200 `loadCodeAssist` calls use `ANTIGRAVITY_LOAD_CODE_ASSIST_METADATA`, free-tier eligibility is honored, missing tiers trigger one `onboardUser` request plus 1s operation polling under a 30s deadline, and a final load refresh supplies `cloudaicompanionProject`.
-- **Model-Family Credential Ranking**: `antigravityRankingStrategy` (`packages/ai/src/usage/google-antigravity.ts`) scopes usage limits by model family (`scopeAntigravityLimitsForModel` via `getAntigravityCounterKeyForModel`: `anthropic` for `claude-`, `google` for `gemini-`/`gemma-`, `openai` for `gpt-`/`openai/`). This prevents quota exhaustion on one counter (e.g. Gemini) from blocking multi-account credential selection for another family (e.g. Claude).
-
-### Catalog model handling
-
-- **Provider entry (`google-antigravity`)**: `packages/catalog/src/compat/rules/providers/google-antigravity.kdl` declares default model `gemini-3.1-pro`.
-- **Authored seeds**: `gemini-3-pro-image`; bundle policy `always`. Limits, capabilities, and prices are authored alongside these rows.
-- **Claude & GPT-OSS Model Availability**: Exposes Anthropic Claude models (`claude-opus-4-5`, `claude-opus-4-6`, `claude-sonnet-4-5`, `claude-sonnet-4-6`) and `gpt-oss-120b` alongside Gemini 3.x/2.5 models in `models.json` (`packages/catalog/src/models.json`).
-
 ## Google Gemini CLI (`google-gemini-cli`)
 
-Google Cloud Code Assist (Gemini CLI) (`google-gemini-cli`) is Google's OAuth-authenticated developer free and workspace tier providing direct access to Gemini models over the Cloud Code Assist API endpoint (`https://cloudcode-pa.googleapis.com`). Rides the shared **Google Gemini CLI / Antigravity** transport section (`packages/ai/src/providers/google-gemini-cli.ts`).
+Google Cloud Code Assist (Gemini CLI) (`google-gemini-cli`) is Google's OAuth-authenticated developer free and workspace tier providing direct access to Gemini models over the Cloud Code Assist API endpoint (`https://cloudcode-pa.googleapis.com`). Rides the shared **Google Gemini CLI** transport section (`packages/ai/src/providers/google-gemini-cli.ts`).
 
 ### Special casings
 
@@ -1190,7 +1150,7 @@ Provider-specific overrides in `packages/catalog/src/compat/rules/providers/goog
 - For class gemini; revision >=3.0.0: `requiresSkipThoughtSignatureOnFirstFunctionCall=true`.
 
 - **Default Endpoint & Headers**: Dispatches requests to `https://cloudcode-pa.googleapis.com` and emits headers via `getGeminiCliHeaders()` (`GeminiCLI/0.46.0/<modelId> ...` in `packages/catalog/src/wire/gemini-headers.ts`).
-- Standard request pipeline: Nothing beyond the Google Gemini CLI / Antigravity transport pipeline.
+- Standard request pipeline: Nothing beyond the Google Gemini CLI transport pipeline.
 
 ### Auth & usage
 
@@ -1201,7 +1161,6 @@ Provider-specific overrides in `packages/catalog/src/compat/rules/providers/goog
 ### Catalog model handling
 
 - **Provider entry (`google-gemini-cli`)**: `packages/catalog/src/compat/rules/providers/google-gemini-cli.kdl` declares default model `gemini-3.1-pro-preview`.
-- **Generator Integration & Priority**: Serves as fallback OAuth token provider in `fetchAntigravityModels` (`packages/catalog/scripts/generate-models.ts`) if `google-antigravity` access is unavailable. Ranked second in provider priority (`packages/catalog/src/identity/priority.ts`).
 
 ## Groq (`groq`)
 

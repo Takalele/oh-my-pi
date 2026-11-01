@@ -512,7 +512,7 @@ export type AuthApiKeyOptions = {
  * Identity that multi-account discovery records in `Model.accountAccess` and
  * that {@link AuthApiKeyOptions.accountIds} selection matches: the provider
  * account id (Codex `chatgpt_account_id`), else the login email for providers
- * whose credentials carry no account id (Antigravity), else the project id for
+ * whose credentials carry no account id (Gemini CLI), else the project id for
  * a login whose email lookup failed. Same precedence as the credential store's
  * identity key.
  */
@@ -585,7 +585,7 @@ export interface OAuthAccessFailure {
  * Identity of the OAuth credential a session is currently routed to. Read-only
  * display/metadata shape: `accountId` is the provider's account UUID, `email`
  * the user-facing login, `projectId` the GCP-style project for providers that
- * key usage on it (Gemini CLI / Antigravity).
+ * key usage on it (Gemini CLI).
  */
 export interface OAuthAccountIdentity {
 	accountId?: string;

@@ -72,7 +72,7 @@ class "gemini" {
 	// google-level transports emit `thinkingLevel` on the wire, so the tier is
 	// dropped there; budget (anthropic-messages) and reasoning_effort resellers
 	// never send the rejected value and keep the four-tier ladder. The collapsed
-	// google-antigravity / google-gemini-cli variants remap minimal -> LOW and
+	// google-gemini-cli variants remap minimal -> LOW and
 	// carry their own explicit ladder, so they are unaffected.
 	// https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/4-argon
 	// https://ai.google.dev/gemini-api/docs/generate-content/thinking#thinking-levels
@@ -99,7 +99,7 @@ class "gemini" {
 	// the introductory rate.
 	// https://ai.google.dev/gemini-api/docs/pricing
 	// https://cloud.google.com/vertex-ai/generative-ai/pricing
-	on "google" "google-vertex" "google-antigravity" {
+	on "google" "google-vertex" {
 		models "gemini-4-argon" {
 			cost-patch {
 				input 2
@@ -142,7 +142,7 @@ class "gemini" {
 			supports-function-part-id #true
 		}
 	}
-	on "google-antigravity" "google-gemini-cli" {
+	on "google-gemini-cli" {
 		family "flash" {
 			stream-first-event-timeout-ms 60000
 			flash-stream-leak-workaround #true

@@ -539,7 +539,7 @@ describe("model thinking derivation", () => {
 		const model = createModel({
 			id: "gemini-3.7-flash",
 			api: "google-gemini-cli",
-			provider: "google-antigravity",
+			provider: "google-gemini-cli",
 			thinking: {
 				mode: "google-level",
 				efforts: [Effort.Minimal, Effort.Low, Effort.Medium, Effort.High],

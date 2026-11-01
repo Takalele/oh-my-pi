@@ -75,7 +75,7 @@ describe("Google transports drop Gemini-unsupported sampling fields (#12784)", (
 		expect(gen.presencePenalty).toBe(0.1);
 	});
 
-	it("Cloud Code Assist (gemini-cli/antigravity) omits minP/repetitionPenalty", async () => {
+	it("Cloud Code Assist (gemini-cli) omits minP/repetitionPenalty", async () => {
 		let body: { request?: { generationConfig?: Record<string, unknown> } } = {};
 		const fetch: FetchImpl = async (_url, init) => {
 			body = JSON.parse(String(init?.body ?? "{}"));

@@ -241,17 +241,17 @@ describe("buildProviderCards", () => {
 
 	it("shows each marked shared quota once without merging independent buckets", () => {
 		const sharedLimit = (counter: "anthropic" | "openai", windowId: "5h" | "7d") => {
-			const value = limit("google-antigravity", "account", windowId, "Claude & GPT (shared)", 0.25, "ok");
+			const value = limit("google-gemini-cli", "account", windowId, "Claude & GPT (shared)", 0.25, "ok");
 			return {
 				...value,
-				id: `google-antigravity:${counter}:default:3p-${windowId}`,
+				id: `google-gemini-cli:${counter}:default:3p-${windowId}`,
 				scope: { ...value.scope, shared: true, sharedGroup: `3p-${windowId}` },
 			};
 		};
 		const reports = [
-			report("google-antigravity", "user@example.test", [
-				limit("google-antigravity", "account", "5h", "Gemini", 0.25, "ok"),
-				limit("google-antigravity", "account", "7d", "Gemini", 0.25, "ok"),
+			report("google-gemini-cli", "user@example.test", [
+				limit("google-gemini-cli", "account", "5h", "Gemini", 0.25, "ok"),
+				limit("google-gemini-cli", "account", "7d", "Gemini", 0.25, "ok"),
 				sharedLimit("anthropic", "5h"),
 				sharedLimit("openai", "5h"),
 				sharedLimit("anthropic", "7d"),
@@ -270,21 +270,21 @@ describe("buildProviderCards", () => {
 	});
 
 	it("keeps distinct buckets that share a label and window separate instead of averaging them", () => {
-		// Antigravity's Google counter: the drained Gemini 4 Argon weekly bucket
+		// One provider's Google counter: the drained Gemini 4 Argon weekly bucket
 		// beside a barely-used shared Gemini weekly bucket (issue #16790). Both
 		// limits say `Gemini|weekly`, so label-keyed grouping averaged them into
 		// one "50% left" row that hid the drained bucket. The provider now labels
 		// the Argon bucket "Gemini (Argon)", but the grouping must hold even for
 		// two limits that share a label (pre-label-fix reports).
 		const googleWeekly = {
-			...limit("google-antigravity", "account", "weekly", "Gemini", 0.0, "ok", now + 99_000),
-			id: "google-antigravity:google:default:gemini-weekly",
+			...limit("google-gemini-cli", "account", "weekly", "Gemini", 0.0, "ok", now + 99_000),
+			id: "google-gemini-cli:google:default:gemini-weekly",
 		};
 		const argonWeekly = {
-			...limit("google-antigravity", "account", "weekly", "Gemini", 1.0, "exhausted", now + 1000),
-			id: "google-antigravity:google:default:gemini-argon-wtu-weekly",
+			...limit("google-gemini-cli", "account", "weekly", "Gemini", 1.0, "exhausted", now + 1000),
+			id: "google-gemini-cli:google:default:gemini-argon-wtu-weekly",
 		};
-		const reports = [report("google-antigravity", "user@example.test", [googleWeekly, argonWeekly])];
+		const reports = [report("google-gemini-cli", "user@example.test", [googleWeekly, argonWeekly])];
 
 		const windows = buildProviderCards(reports, now)[0].windows;
 
@@ -484,13 +484,13 @@ describe("UsageDashboardComponent", () => {
 		// must not merge them into one bucket with two identical account rows.
 		const now = Date.now();
 		const withId = (id: string, frac: number, status: "ok" | "exhausted") => ({
-			...limit("google-antigravity", "account", "weekly", "Gemini", frac, status, now + 3_600_000),
+			...limit("google-gemini-cli", "account", "weekly", "Gemini", frac, status, now + 3_600_000),
 			id,
 		});
 		const component = dashboard([
-			report("google-antigravity", "user@example.test", [
-				withId("google-antigravity:google:default:gemini-weekly", 0.0, "ok"),
-				withId("google-antigravity:google:default:gemini-argon-wtu-weekly", 1.0, "exhausted"),
+			report("google-gemini-cli", "user@example.test", [
+				withId("google-gemini-cli:google:default:gemini-weekly", 0.0, "ok"),
+				withId("google-gemini-cli:google:default:gemini-argon-wtu-weekly", 1.0, "exhausted"),
 			]),
 		]);
 		try {

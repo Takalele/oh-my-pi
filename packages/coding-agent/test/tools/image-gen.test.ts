@@ -402,36 +402,6 @@ describe("imageGenTool catalog routing", () => {
 		});
 	});
 
-	it("falls back to the selected Antigravity id when discovery advertises no image model", async () => {
-		const model = catalogModel("google-antigravity", "gemini-selected-image", "google-gemini-cli");
-		const requestBodies: Array<Record<string, unknown>> = [];
-		const fetchMock: FetchImpl = async (input, init) => {
-			const url = input.toString();
-			if (url.endsWith("/v1internal:fetchAvailableModels")) {
-				return new Response(JSON.stringify({ imageGenerationModelIds: [] }), { status: 200 });
-			}
-			requestBodies.push(JSON.parse(String(init?.body)));
-			return new Response(
-				`data: ${JSON.stringify({ response: { candidates: [{ content: { role: "model", parts: [{ inlineData: { data: PNG_DATA, mimeType: "image/png" } }] } }] } })}\n\n`,
-				{ status: 200, headers: { "content-type": "text/event-stream" } },
-			);
-		};
-		const credentials = JSON.stringify({ token: "antigravity-token", projectId: "catalog-project" });
-		const settings = Settings.isolated({ modelRoles: { image: "google-antigravity/gemini-selected-image" } });
-		const ctx = createContext({
-			models: [model],
-			settings,
-			fetch: fetchMock,
-			credentials: { "google-antigravity": credentials },
-		});
-
-		const result = await imageGenTool.execute("antigravity", { subject: "fallback id" }, undefined, ctx);
-		collectPaths(result);
-
-		expect(requestBodies[0]).toMatchObject({ model: "gemini-selected-image", project: "catalog-project" });
-		expect(result.details?.model).toBe("gemini-selected-image");
-	});
-
 	it("uses a same-provider hosted chat carrier and places the selected OpenAI image id on the tool", async () => {
 		const image = catalogModel("openai", "gpt-image-selected", "openai-responses");
 		const activeCarrier = catalogModel("openai", "gpt-5.5", "openai-responses", "chat");

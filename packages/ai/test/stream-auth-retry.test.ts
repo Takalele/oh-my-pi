@@ -188,7 +188,7 @@ describe("streamSimple resolver auth retry", () => {
 						? stream.fail(
 								new OAuthError("OAuth token expired before request", {
 									kind: "token-refresh",
-									provider: "google-antigravity",
+									provider: "google-gemini-cli",
 								}),
 							)
 						: ok(stream),
@@ -220,11 +220,11 @@ describe("streamSimple resolver auth retry", () => {
 		const contexts: ApiKeyResolveContext[] = [];
 		const firstError = new OAuthError("First token expired before request", {
 			kind: "token-refresh",
-			provider: "google-antigravity",
+			provider: "google-gemini-cli",
 		});
 		const secondError = new OAuthError("Refreshed token also expired before request", {
 			kind: "token-refresh",
-			provider: "google-antigravity",
+			provider: "google-gemini-cli",
 		});
 		let providerCalls = 0;
 		registerCustomApi(
@@ -265,7 +265,7 @@ describe("streamSimple resolver auth retry", () => {
 		const contexts: ApiKeyResolveContext[] = [];
 		const configurationError = new OAuthError("OAuth provider is misconfigured", {
 			kind: "configuration",
-			provider: "google-antigravity",
+			provider: "google-gemini-cli",
 		});
 		let providerCalls = 0;
 		registerCustomApi(

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import * as AIError from "@oh-my-pi/pi-ai/error";
 import { streamGoogle } from "@oh-my-pi/pi-ai/providers/google";
 import { streamGoogleGeminiCli } from "@oh-my-pi/pi-ai/providers/google-gemini-cli";
@@ -23,7 +23,7 @@ function genaiChunk(text: string): Record<string, unknown> {
 	};
 }
 
-/** `{ response: { candidates } }` envelope (Cloud Code Assist: google-gemini-cli / antigravity). */
+/** `{ response: { candidates } }` envelope (Cloud Code Assist: google-gemini-cli). */
 function ccaChunk(text: string): Record<string, unknown> {
 	return { response: genaiChunk(text) };
 }
@@ -99,25 +99,6 @@ const cliModel: Model<"google-gemini-cli"> = buildModel({
 	contextWindow: 200_000,
 	maxTokens: 32_000,
 });
-
-const ANTIGRAVITY_DAILY_ENDPOINT = "https://daily-cloudcode-pa.googleapis.com";
-const ANTIGRAVITY_SANDBOX_ENDPOINT = "https://daily-cloudcode-pa.sandbox.googleapis.com";
-
-const antigravityModel: Model<"google-gemini-cli"> = buildModel({
-	...cliModel,
-	provider: "google-antigravity",
-	baseUrl: ANTIGRAVITY_DAILY_ENDPOINT,
-});
-
-function withResponseUrl(response: Response, endpoint: string): Response {
-	Object.defineProperty(response, "url", { value: `${endpoint}/v1internal:streamGenerateContent?alt=sse` });
-	return response;
-}
-
-function endpointFromInput(input: Parameters<FetchImpl>[0]): string {
-	const url = input instanceof Request ? input.url : input.toString();
-	return url.startsWith(ANTIGRAVITY_SANDBOX_ENDPOINT) ? ANTIGRAVITY_SANDBOX_ENDPOINT : ANTIGRAVITY_DAILY_ENDPOINT;
-}
 
 describe("Google empty-response retry (public + Vertex path)", () => {
 	it("retries a STOP-with-empty-text response and delivers the real follow-up content", async () => {
@@ -268,17 +249,6 @@ describe("Google empty-response retry (public + Vertex path)", () => {
 });
 
 describe("Google empty-response retry (Cloud Code Assist path)", () => {
-	// Endpoint-counting mocks model CCA only; pinning the client version keeps
-	// the Antigravity manifest lookup off the injected fetch.
-	const savedAntigravityVersion = process.env.PI_AI_ANTIGRAVITY_VERSION;
-	beforeEach(() => {
-		process.env.PI_AI_ANTIGRAVITY_VERSION = "2.19.1";
-	});
-	afterEach(() => {
-		if (savedAntigravityVersion === undefined) delete process.env.PI_AI_ANTIGRAVITY_VERSION;
-		else process.env.PI_AI_ANTIGRAVITY_VERSION = savedAntigravityVersion;
-	});
-
 	it("retries a STOP-with-empty-text response (the reported gemini-3-flash hang)", async () => {
 		let calls = 0;
 		const fetchMock: FetchImpl = async () => {
@@ -349,6 +319,31 @@ describe("Google empty-response retry (Cloud Code Assist path)", () => {
 		expect(result.errorMessage).toBeUndefined();
 	});
 
+	it("accepts Advisor silence without retrying after thought events start", async () => {
+		let calls = 0;
+		const fetchMock: FetchImpl = async () => {
+			calls += 1;
+			return sse(ccaThinkingOnlyChunk("No concrete risk. I will stay silent."));
+		};
+
+		const stream = streamGoogleGeminiCli(cliModel, context, {
+			apiKey: JSON.stringify({ token: "token", projectId: "proj-123" }),
+			acceptEmptyResponse: true,
+			fetch: fetchMock,
+		});
+		const { events, starts } = await drain(stream);
+		const result = await stream.result();
+
+		expect(calls).toBe(1);
+		expect(starts).toBe(1);
+		expect(events.filter(event => event.type === "thinking_start")).toHaveLength(1);
+		expect(events.filter(event => event.type === "thinking_delta")).toHaveLength(1);
+		expect(events.filter(event => event.type === "thinking_end")).toHaveLength(1);
+		expect(result.stopReason).toBe("stop");
+		expect(result.errorMessage).toBeUndefined();
+		expect(textOf(result)).toBe("");
+	});
+
 	it("retries a stripped planning leak when empty STOPs are accepted", async () => {
 		let calls = 0;
 		const fetchMock: FetchImpl = async () => {
@@ -393,153 +388,6 @@ describe("Google empty-response retry (Cloud Code Assist path)", () => {
 		expect(events.filter(e => e.type === "toolcall_start")).toHaveLength(1);
 	});
 
-	it("fails over to the sandbox endpoint after daily returns only empty successful streams", async () => {
-		const requestedEndpoints: string[] = [];
-		const fetchMock: FetchImpl = async input => {
-			const endpoint = endpointFromInput(input);
-			requestedEndpoints.push(endpoint);
-			const response = endpoint === ANTIGRAVITY_SANDBOX_ENDPOINT ? sse(ccaChunk("Recovered.")) : sse(ccaChunk(""));
-			return withResponseUrl(response, endpoint);
-		};
-
-		const stream = streamGoogleGeminiCli(antigravityModel, context, {
-			apiKey: JSON.stringify({ token: "token", projectId: "proj-123" }),
-			antigravityEndpointMode: "auto",
-			fetch: fetchMock,
-		});
-		const { starts } = await drain(stream);
-		const result = await stream.result();
-
-		expect(requestedEndpoints).toEqual([
-			ANTIGRAVITY_DAILY_ENDPOINT,
-			ANTIGRAVITY_DAILY_ENDPOINT,
-			ANTIGRAVITY_DAILY_ENDPOINT,
-			ANTIGRAVITY_SANDBOX_ENDPOINT,
-		]);
-		expect(starts).toBe(1);
-		expect(result.stopReason).toBe("stop");
-		expect(textOf(result)).toBe("Recovered.");
-	});
-
-	it("exhausts Antigravity auto failover before accepting silence", async () => {
-		const requestedEndpoints: string[] = [];
-		const fetchMock: FetchImpl = async input => {
-			const endpoint = endpointFromInput(input);
-			requestedEndpoints.push(endpoint);
-			return withResponseUrl(sse(ccaChunk("")), endpoint);
-		};
-
-		const stream = streamGoogleGeminiCli(antigravityModel, context, {
-			apiKey: JSON.stringify({ token: "token", projectId: "proj-123" }),
-			antigravityEndpointMode: "auto",
-			acceptEmptyResponse: true,
-			fetch: fetchMock,
-		});
-		const result = await stream.result();
-
-		// Daily still burns its empty-response budget and fails over; only the
-		// last (sandbox) endpoint records the empty STOP as valid silence.
-		expect(requestedEndpoints).toEqual([
-			ANTIGRAVITY_DAILY_ENDPOINT,
-			ANTIGRAVITY_DAILY_ENDPOINT,
-			ANTIGRAVITY_DAILY_ENDPOINT,
-			ANTIGRAVITY_SANDBOX_ENDPOINT,
-		]);
-		expect(result.stopReason).toBe("stop");
-		expect(result.errorMessage).toBeUndefined();
-	});
-
-	it("accepts Advisor silence without failover after thought events start", async () => {
-		const requestedEndpoints: string[] = [];
-		const fetchMock: FetchImpl = async input => {
-			const endpoint = endpointFromInput(input);
-			requestedEndpoints.push(endpoint);
-			const response =
-				endpoint === ANTIGRAVITY_SANDBOX_ENDPOINT
-					? sse(ccaChunk("Recovered."))
-					: sse(ccaThinkingOnlyChunk("No concrete risk. I will stay silent."));
-			return withResponseUrl(response, endpoint);
-		};
-
-		const stream = streamGoogleGeminiCli(antigravityModel, context, {
-			apiKey: JSON.stringify({ token: "token", projectId: "proj-123" }),
-			antigravityEndpointMode: "auto",
-			acceptEmptyResponse: true,
-			fetch: fetchMock,
-		});
-		const { events, starts } = await drain(stream);
-		const result = await stream.result();
-
-		expect(requestedEndpoints).toEqual([ANTIGRAVITY_DAILY_ENDPOINT]);
-		expect(starts).toBe(1);
-		expect(events.filter(event => event.type === "thinking_start")).toHaveLength(1);
-		expect(events.filter(event => event.type === "thinking_delta")).toHaveLength(1);
-		expect(events.filter(event => event.type === "thinking_end")).toHaveLength(1);
-		expect(result.stopReason).toBe("stop");
-		expect(result.errorMessage).toBeUndefined();
-		expect(textOf(result)).toBe("");
-	});
-
-	it("does not fail over a thought-only error after stream events start", async () => {
-		const requestedEndpoints: string[] = [];
-		const fetchMock: FetchImpl = async input => {
-			const endpoint = endpointFromInput(input);
-			requestedEndpoints.push(endpoint);
-			const response =
-				endpoint === ANTIGRAVITY_SANDBOX_ENDPOINT
-					? sse(ccaChunk("Recovered."))
-					: sse(ccaThinkingOnlyChunk("I reasoned but omitted the final answer."));
-			return withResponseUrl(response, endpoint);
-		};
-
-		const stream = streamGoogleGeminiCli(antigravityModel, context, {
-			apiKey: JSON.stringify({ token: "token", projectId: "proj-123" }),
-			antigravityEndpointMode: "auto",
-			fetch: fetchMock,
-		});
-		const { events, starts } = await drain(stream);
-		const result = await stream.result();
-
-		expect(requestedEndpoints).toEqual([ANTIGRAVITY_DAILY_ENDPOINT]);
-		expect(starts).toBe(1);
-		expect(events.filter(event => event.type === "thinking_start")).toHaveLength(1);
-		expect(events.filter(event => event.type === "thinking_delta")).toHaveLength(1);
-		expect(events.filter(event => event.type === "thinking_end")).toHaveLength(1);
-		expect(result.stopReason).toBe("error");
-		expect(result.errorMessage).toContain("thought-only response without final output");
-		expect(result.content).toEqual([
-			expect.objectContaining({
-				type: "thinking",
-				thinking: "I reasoned but omitted the final answer.",
-			}),
-		]);
-	});
-
-	for (const { mode, endpoint } of [
-		{ mode: "production", endpoint: ANTIGRAVITY_DAILY_ENDPOINT },
-		{ mode: "sandbox", endpoint: ANTIGRAVITY_SANDBOX_ENDPOINT },
-	] as const) {
-		it(`keeps empty-response retries on the selected ${mode} endpoint`, async () => {
-			const requestedEndpoints: string[] = [];
-			const fetchMock: FetchImpl = async input => {
-				const requestedEndpoint = endpointFromInput(input);
-				requestedEndpoints.push(requestedEndpoint);
-				return withResponseUrl(sse(ccaChunk("")), requestedEndpoint);
-			};
-
-			const stream = streamGoogleGeminiCli(antigravityModel, context, {
-				apiKey: JSON.stringify({ token: "token", projectId: "proj-123" }),
-				antigravityEndpointMode: mode,
-				fetch: fetchMock,
-			});
-			const result = await stream.result();
-
-			expect(requestedEndpoints).toEqual([endpoint, endpoint, endpoint]);
-			expect(result.stopReason).toBe("error");
-			expect(result.errorMessage).toContain("empty response");
-		});
-	}
-
 	for (const { name, chunk, errorText } of [
 		{
 			name: "SAFETY finish",
@@ -564,32 +412,29 @@ describe("Google empty-response retry (Cloud Code Assist path)", () => {
 			errorText: "PROHIBITED_CONTENT",
 		},
 	] as const) {
-		it(`does not fail over after a terminal ${name}`, async () => {
-			const requestedEndpoints: string[] = [];
-			const fetchMock: FetchImpl = async input => {
-				const endpoint = endpointFromInput(input);
-				requestedEndpoints.push(endpoint);
-				return withResponseUrl(sse(chunk), endpoint);
+		it(`surfaces a terminal ${name} without retrying`, async () => {
+			let calls = 0;
+			const fetchMock: FetchImpl = async () => {
+				calls += 1;
+				return sse(chunk);
 			};
 
-			const stream = streamGoogleGeminiCli(antigravityModel, context, {
+			const stream = streamGoogleGeminiCli(cliModel, context, {
 				apiKey: JSON.stringify({ token: "token", projectId: "proj-123" }),
-				antigravityEndpointMode: "auto",
 				fetch: fetchMock,
 			});
 			const result = await stream.result();
 
-			expect(requestedEndpoints).toEqual([ANTIGRAVITY_DAILY_ENDPOINT]);
+			expect(calls).toBe(1);
 			expect(result.stopReason).toBe("error");
 			expect(result.errorMessage).toContain(errorText);
 		});
 	}
 
-	it("does not fail over after an account-verification HTTP 403", async () => {
-		const requestedEndpoints: string[] = [];
-		const fetchMock: FetchImpl = async input => {
-			const endpoint = endpointFromInput(input);
-			requestedEndpoints.push(endpoint);
+	it("surfaces an account-verification HTTP 403 without retrying", async () => {
+		let calls = 0;
+		const fetchMock: FetchImpl = async () => {
+			calls += 1;
 			return new Response(
 				JSON.stringify({
 					error: {
@@ -608,38 +453,32 @@ describe("Google empty-response retry (Cloud Code Assist path)", () => {
 			);
 		};
 
-		const stream = streamGoogleGeminiCli(antigravityModel, context, {
+		const stream = streamGoogleGeminiCli(cliModel, context, {
 			apiKey: JSON.stringify({ token: "token", projectId: "proj-123" }),
-			antigravityEndpointMode: "auto",
 			fetch: fetchMock,
 		});
 		const result = await stream.result();
 
-		expect(requestedEndpoints).toEqual([ANTIGRAVITY_DAILY_ENDPOINT]);
+		expect(calls).toBe(1);
 		expect(result.stopReason).toBe("error");
 		expect(result.errorMessage).toContain("Account verification required");
 	});
 
-	it("does not fail over after partial output has started", async () => {
-		const requestedEndpoints: string[] = [];
-		const fetchMock: FetchImpl = async input => {
-			const endpoint = endpointFromInput(input);
-			requestedEndpoints.push(endpoint);
-			return withResponseUrl(
-				sse({ response: { candidates: [{ content: { parts: [{ text: "partial" }] } }] } }),
-				endpoint,
-			);
+	it("does not retry once partial output has started", async () => {
+		let calls = 0;
+		const fetchMock: FetchImpl = async () => {
+			calls += 1;
+			return sse({ response: { candidates: [{ content: { parts: [{ text: "partial" }] } }] } });
 		};
 
-		const stream = streamGoogleGeminiCli(antigravityModel, context, {
+		const stream = streamGoogleGeminiCli(cliModel, context, {
 			apiKey: JSON.stringify({ token: "token", projectId: "proj-123" }),
-			antigravityEndpointMode: "auto",
 			fetch: fetchMock,
 		});
 		const { starts } = await drain(stream);
 		const result = await stream.result();
 
-		expect(requestedEndpoints).toEqual([ANTIGRAVITY_DAILY_ENDPOINT]);
+		expect(calls).toBe(1);
 		expect(starts).toBe(1);
 		expect(result.stopReason).toBe("error");
 		expect(textOf(result)).toBe("partial");

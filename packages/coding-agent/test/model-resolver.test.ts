@@ -2834,8 +2834,8 @@ describe("effort-tier variant aliases", () => {
 			requestModelId: "gemini-3.5-flash-extra-low",
 			name: "Gemini 3.5 Flash",
 			api: "google-gemini-cli",
-			provider: "google-antigravity",
-			baseUrl: "https://daily-cloudcode-pa.googleapis.com",
+			provider: "google-gemini-cli",
+			baseUrl: "https://cloudcode-pa.googleapis.com",
 			reasoning: true,
 			thinking: {
 				mode: "google-level",
@@ -2860,8 +2860,8 @@ describe("effort-tier variant aliases", () => {
 			id: "gemini-3-flash",
 			name: "Gemini 3 Flash",
 			api: "google-gemini-cli",
-			provider: "google-antigravity",
-			baseUrl: "https://daily-cloudcode-pa.googleapis.com",
+			provider: "google-gemini-cli",
+			baseUrl: "https://cloudcode-pa.googleapis.com",
 			reasoning: true,
 			thinking: { mode: "google-level", efforts: [Effort.Minimal, Effort.Low, Effort.Medium, Effort.High] },
 			input: ["text", "image"],
@@ -2886,20 +2886,20 @@ describe("effort-tier variant aliases", () => {
 	];
 
 	test("provider-qualified retired tier ids preserve their routed effort", () => {
-		const result = parseModelPattern("google-antigravity/gemini-3.5-flash-low", variantModels);
+		const result = parseModelPattern("google-gemini-cli/gemini-3.5-flash-low", variantModels);
 		expect(result.model?.id).toBe("gemini-3.5-flash");
 		expect(result.thinkingLevel).toBe(Effort.High);
 	});
 
 	test("the default wire id shared by several levels leaves the thinking level unset", () => {
-		const result = parseModelPattern("google-antigravity/gemini-3.5-flash-extra-low", variantModels);
+		const result = parseModelPattern("google-gemini-cli/gemini-3.5-flash-extra-low", variantModels);
 		expect(result.model?.id).toBe("gemini-3.5-flash");
 		expect(result.thinkingLevel).toBeUndefined();
 		expect(result.explicitThinkingLevel).toBe(false);
 	});
 
 	test("retired tier ids keep explicit :level suffixes", () => {
-		const result = parseModelPattern("google-antigravity/gemini-3.5-flash-low:high", variantModels);
+		const result = parseModelPattern("google-gemini-cli/gemini-3.5-flash-low:high", variantModels);
 		expect(result.model?.id).toBe("gemini-3.5-flash");
 		expect(result.thinkingLevel).toBe(Effort.High);
 	});
@@ -2907,11 +2907,11 @@ describe("effort-tier variant aliases", () => {
 	test("bare retired tier ids resolve through the alias table", () => {
 		const result = parseModelPattern("gemini-3.5-flash-extra-low", variantModels);
 		expect(result.model?.id).toBe("gemini-3.5-flash");
-		expect(result.model?.provider).toBe("google-antigravity");
+		expect(result.model?.provider).toBe("google-gemini-cli");
 	});
 
 	test("live models always beat recycled aliases", () => {
-		const result = parseModelPattern("google-antigravity/gemini-3-flash", variantModels);
+		const result = parseModelPattern("google-gemini-cli/gemini-3-flash", variantModels);
 		expect(result.model?.id).toBe("gemini-3-flash");
 	});
 

@@ -24,7 +24,7 @@ function createGoogleCliModel(id: string): Model<"google-gemini-cli"> {
 		id,
 		name: id,
 		api: "google-gemini-cli",
-		provider: "google-antigravity",
+		provider: "google-gemini-cli",
 		baseUrl: "https://example.com",
 		reasoning: false,
 		input: ["text"],
@@ -1042,7 +1042,7 @@ describe("normalizeSchemaForCCA", () => {
 		expect(normalized.description).toBe('ID\n\n{pattern: "^\\\\d+$", minLength: 1, maxLength: 8}');
 	});
 
-	it("uses the same merged object output in shared and gemini-cli Antigravity paths", () => {
+	it("uses the same merged object output in shared and Cloud Code Assist request paths", () => {
 		const parameters = {
 			anyOf: [
 				{
@@ -1072,11 +1072,8 @@ describe("normalizeSchemaForCCA", () => {
 			messages: [{ role: "user", content: "hello", timestamp: 0 }],
 			tools,
 		};
-		const antigravityRequest = buildRequest(createGoogleCliModel("gemini-2.5-pro"), context, "project", {}, true);
-		const antigravityDeclaration = antigravityRequest.request.tools?.[0]?.functionDeclarations[0] as Record<
-			string,
-			unknown
-		>;
+		const cliRequest = buildRequest(createGoogleCliModel("claude-sonnet-4-5"), context, "project");
+		const cliDeclaration = cliRequest.request.tools?.[0]?.functionDeclarations[0] as Record<string, unknown>;
 
 		const expected = {
 			type: "object",
@@ -1088,9 +1085,9 @@ describe("normalizeSchemaForCCA", () => {
 			required: ["shared"],
 		};
 		expect(sharedDeclaration.parameters).toEqual(expected);
-		expect(antigravityDeclaration.parameters).toEqual(expected);
-		expect(antigravityDeclaration.parameters).toEqual(sharedDeclaration.parameters);
-		expect(antigravityDeclaration.parametersJsonSchema).toBeUndefined();
+		expect(cliDeclaration.parameters).toEqual(expected);
+		expect(cliDeclaration.parameters).toEqual(sharedDeclaration.parameters);
+		expect(cliDeclaration.parametersJsonSchema).toBeUndefined();
 	});
 
 	it("does not retain stale required keys after an object-union anyOf merge", () => {

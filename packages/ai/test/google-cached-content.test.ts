@@ -139,8 +139,8 @@ function capturingFetch(response: Response = sseStop()): {
 	return { fetch, calls: () => calls };
 }
 
-// Compile-time: cachedContent is only on GenerateContent / Vertex options, not Gemini CLI /
-// Antigravity (google-gemini-cli) or any other Google transport registration.
+// Compile-time: cachedContent is only on GenerateContent / Vertex options, not the
+// Cloud Code Assist (google-gemini-cli) transport or any other Google registration.
 type _GeminiCliLacksCachedContent = "cachedContent" extends keyof GoogleGeminiCliOptions ? never : true;
 true satisfies _GeminiCliLacksCachedContent;
 type _CliApiLacksCachedContent = "cachedContent" extends keyof ApiOptionsMap["google-gemini-cli"] ? never : true;
@@ -357,7 +357,7 @@ describe("Google caller-owned cachedContent", () => {
 
 describe("mapGoogleUsage", () => {
 	it("never reports negative input when promptTokenCount is missing or below the cache count", () => {
-		// Antigravity usage seen in the wild: no promptTokenCount and a cache
+		// Cloud Code Assist usage seen in the wild: no promptTokenCount and a cache
 		// count larger than the prompt implied by the total.
 		const usage = mapGoogleUsage({
 			cachedContentTokenCount: 303_104,

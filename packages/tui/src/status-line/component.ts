@@ -1,10 +1,6 @@
 import * as path from "node:path";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { AssistantMessage, UsageLimit, UsageReport } from "@oh-my-pi/pi-ai";
-import {
-	getAntigravityCounterKeyForModel,
-	scopeAntigravityLimitsForModel,
-} from "@oh-my-pi/pi-ai/usage/google-antigravity";
 import { getNextTimeBasedPricingTransition } from "@oh-my-pi/pi-catalog/models";
 import type { Model, ModelCost } from "@oh-my-pi/pi-catalog/types";
 import type { VcsGitRepo, VcsRepo } from "@oh-my-pi/pi-natives";
@@ -2253,8 +2249,6 @@ export class StatusLineComponent<TSession extends StatusLineSession = StatusLine
 		const now = Date.now();
 		const resetReports: UsageReport[] = [];
 		const activeModelId = normalizeUsageScopeValue(context.modelId);
-		const activeAntigravityCounter =
-			context.provider === "google-antigravity" ? getAntigravityCounterKeyForModel(context.modelId) : undefined;
 		const monthlySubscriptionProvider =
 			context.provider !== undefined && MONTHLY_SUBSCRIPTION_PROVIDERS[context.provider] === true;
 		const scopeGroups = new Map<string, UsageScopeGroup>();
@@ -2273,11 +2267,7 @@ export class StatusLineComponent<TSession extends StatusLineSession = StatusLine
 			) {
 				resetReports.push(usageReport);
 			}
-			const limits =
-				provider === "google-antigravity" && activeAntigravityCounter
-					? scopeAntigravityLimitsForModel(usageReport, context)
-					: reportLimits;
-			for (const limit of limits) {
+			for (const limit of reportLimits) {
 				if (
 					!limit ||
 					typeof limit !== "object" ||

@@ -115,7 +115,7 @@ describe("Factory Droid gemini wire — history replay", () => {
 			messages: [
 				{ role: "user", content: "hi", timestamp: 1 },
 				assistantMessage([{ type: "text", text: "other Gemini", textSignature: "other-model-sig" }], {
-					provider: "google-antigravity",
+					provider: "google-gemini-cli",
 					api: "google-gemini-cli",
 					model: "gemini-3.8-flash",
 				}),
@@ -246,7 +246,7 @@ describe("Factory Droid gemini wire — history replay", () => {
 	});
 
 	it("keeps the newest signature of a thinking block signed more than once, as the other Google routes do", async () => {
-		// Live Factory and Antigravity thought parts arrive unsigned; Gemini validates
+		// Live Factory and Cloud Code Assist thought parts arrive unsigned; Gemini validates
 		// only function-call signatures, so this pins the rule rather than a wire need.
 		const { result } = await run("hi", [
 			JSON.stringify({
