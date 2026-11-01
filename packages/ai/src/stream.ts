@@ -2365,11 +2365,14 @@ function mapOptionsForApi<TApi extends Api>(
 					? requireSupportedEffort(antigravityModel, options.reasoning)
 					: undefined;
 			// The SKU id + effort map onto the binary's model/thought_level
-			// configOptions inside the provider; only cwd is a wire option here.
+			// configOptions inside the provider; cwd and the Cursor-style
+			// tool-result sink (server-exec tool cards pair through it) are
+			// the wire options here.
 			return castApi<"antigravity-acp">({
 				...base,
 				cwd: options?.cwd,
 				reasoning: effort,
+				cursorOnToolResult: options?.cursorOnToolResult ?? options?.execHandlers?.onToolResult,
 			});
 		}
 		case "devin-agent": {

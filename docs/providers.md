@@ -34,7 +34,7 @@ The `antigravity` provider drives Google's **official** Antigravity agent throug
 
 1. Install the runtime once: `omp antigravity install` (verify with `omp antigravity status`; `omp antigravity update` re-checks the pinned version).
 2. Run `/login antigravity` (or `omp login antigravity`). The server prints a Google sign-in link; complete it in your browser.
-3. Pick a model like any other provider (e.g. `gemini-3.7-flash-high`) and prompt. The agent runs its own file/terminal tools inside the session directory; their activity shows as reasoning summaries, not as omp tool calls.
+3. Pick a model like any other provider (e.g. `gemini-3.7-flash-high`) and prompt. The agent runs its own file/terminal tools inside the session directory; they appear as ordinary tool cards in the transcript, but omp never executes them — the Antigravity runtime already did.
 
 omp never reads, proxies, or pools the Google tokens the binary stores, and offers no quota probing — usage comes only from what the agent reports during a turn. `OMP_ANTIGRAVITY_ACP_PATH` points omp at a user-managed `agy_acp_server` binary instead of the managed download.
 
