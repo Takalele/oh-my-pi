@@ -27,6 +27,7 @@ import {
 	type AntigravityAcpConnection,
 	type AntigravityAcpInstall,
 } from "@oh-my-pi/pi-utils/antigravity";
+import { editDiffString } from "@oh-my-pi/pi-natives";
 import type { Client, ContentBlock, SessionConfigOption, SessionUpdate, ToolCallUpdate } from "@oh-my-pi/pi-utils/acp";
 import { logger, VERSION } from "@oh-my-pi/pi-utils";
 import * as AIError from "../error";
@@ -115,8 +116,16 @@ interface AntigravityAcpTurn {
 	 * `toolCallId` as the `session/request_permission` request). Mirroring
 	 * that echo would show a card for a call that may never run; the
 	 * execution frames that follow create the block and inherit its diff.
+	 * Auto-approved runs execute under a DIFFERENT id (`<session>:N`) with
+	 * no diff/rawInput on their frames, so echoes are additionally indexed
+	 * by kind+target (command line or path) and seed those cards instead.
+	 * `echoIds` remembers every echoed id: a terminal frame for an id whose
+	 * call was mirrored under another id (or denied) must not open a second
+	 * card.
 	 */
 	pendingFrames: Map<string, ToolFrame>;
+	pendingByTarget: Map<string, ToolFrame>;
+	echoIds: Set<string>;
 	/** Pairs each mirrored block with a synthesized toolResult (Cursor-exec path). */
 	onToolResult?: CursorToolResultHandler;
 	onUpdate(update: SessionUpdate): void;
@@ -284,10 +293,14 @@ function createTurn(
 ): AntigravityAcpTurn {
 	const byId = new Map<string, TrackedToolBlock>();
 	const pending = new Map<string, ToolFrame>();
+	const pendingByTarget = new Map<string, ToolFrame>();
+	const echoIds = new Set<string>();
 	const turn: AntigravityAcpTurn = {
 		state,
 		blocks: byId,
 		pendingFrames: pending,
+		pendingByTarget,
+		echoIds,
 		onToolResult: options.cursorOnToolResult,
 		onUpdate(update) {
 			switch (update.sessionUpdate) {
@@ -340,6 +353,8 @@ interface TrackedToolBlock {
 	toolName: string;
 	ended: boolean;
 	paired: boolean;
+	/** Diff/op/path carried from the approval echo into the result details. */
+	editMeta?: { diff: string; op: "create" | "update"; path?: string; firstChangedLine?: number };
 }
 
 /** ACP `kind` → omp built-in tool name, so the TUI picks the native renderer. */
@@ -387,19 +402,30 @@ function handleToolUpdate(turn: AntigravityAcpTurn, state: AntigravityAcpStreamS
 		const status = update.status ?? "in_progress";
 		if (status === "pending") {
 			// Approval echo: the same `toolCallId` also arrives in the
-			// `session/request_permission` request, and the call may never run
-			// (denied, or re-issued under another id). Hold it — the diff and
-			// rawInput seed the card if an execution frame follows.
+			// `session/request_permission` request, and the call may never
+			// run under this id (denied, or re-issued under a `<session>:N`
+			// id by an auto-approved run). Hold it: its diff/rawInput seed
+			// the card the execution frames open — matched by id when the
+			// ids agree, or by kind+target when they do not.
 			const seen = turn.pendingFrames.get(update.toolCallId);
 			turn.pendingFrames.set(update.toolCallId, seen ? mergeFrames(seen, update) : update);
+			turn.echoIds.add(update.toolCallId);
+			const target = echoTarget(update);
+			if (target) {
+				const seenTarget = turn.pendingByTarget.get(target);
+				turn.pendingByTarget.set(target, seenTarget ? mergeFrames(seenTarget, update) : update);
+			}
 			return;
 		}
-		const echoed = turn.pendingFrames.get(update.toolCallId);
+		const idEcho = turn.pendingFrames.get(update.toolCallId);
+		const echoed = idEcho ?? claimEchoByTarget(turn, update);
 		turn.pendingFrames.delete(update.toolCallId);
-		if (status === "failed" && echoed) {
-			// Terminal failure for a call that was only ever echoed: the
-			// approval did not lead to execution here. No work happened, so
-			// no card — a failed card would report an execution that was not.
+		if (status === "failed" && (idEcho !== undefined || turn.echoIds.delete(update.toolCallId))) {
+			// Terminal failure of an echoed call under its own id (approval
+			// denied), or the "approved but never executed" tombstone of an
+			// echo whose run happened under another id: no work happened
+			// here, so no card — a failed card would report an execution
+			// that never ran.
 			return;
 		}
 		endText(state);
@@ -420,6 +446,7 @@ function handleToolUpdate(turn: AntigravityAcpTurn, state: AntigravityAcpStreamS
 			toolName,
 			ended: false,
 			paired: false,
+			editMeta: editMetaFromFrame(frame),
 		};
 		turn.blocks.set(update.toolCallId, tracked);
 		state.stream.push({ type: "toolcall_start", contentIndex: tracked.contentIndex, partial: state.output });
@@ -438,7 +465,7 @@ function handleToolUpdate(turn: AntigravityAcpTurn, state: AntigravityAcpStreamS
 	if (status === "completed" || status === "failed") {
 		endToolBlock(state, tracked);
 		const text = resultText(update.rawOutput) ?? update.title?.trim() ?? "completed";
-		void deliverToolResult(turn, tracked, text, status === "failed");
+		void deliverToolResult(turn, tracked, text, status === "failed", update.rawOutput);
 	}
 }
 
@@ -477,14 +504,17 @@ async function deliverToolResult(
 	tracked: TrackedToolBlock,
 	text: string,
 	isError: boolean,
+	rawOutput?: unknown,
 ): Promise<void> {
 	if (tracked.paired) return;
 	tracked.paired = true;
+	const details = resultDetails(tracked, rawOutput);
 	const result: ToolResultMessage = {
 		role: "toolResult",
 		toolCallId: tracked.block.id,
 		toolName: tracked.toolName,
 		content: [{ type: "text", text }],
+		...(details ? { details } : {}),
 		isError,
 		timestamp: Date.now(),
 	};
@@ -493,6 +523,97 @@ async function deliverToolResult(
 	} catch {
 		// A rejecting transformer mirrors Cursor: the reserved payload stands.
 	}
+}
+
+/**
+ * Renderer-facing result details: `EditToolDetails`-shaped diff for edit
+ * cards (built from the approval echo — execution frames never carry it),
+ * bash-shaped exit code for command cards.
+ */
+function resultDetails(tracked: TrackedToolBlock, rawOutput?: unknown): Record<string, unknown> | undefined {
+	if (tracked.toolName === "edit" && tracked.editMeta) {
+		return {
+			diff: tracked.editMeta.diff,
+			op: tracked.editMeta.op,
+			...(tracked.editMeta.path !== undefined ? { path: tracked.editMeta.path } : {}),
+			...(tracked.editMeta.firstChangedLine !== undefined
+				? { firstChangedLine: tracked.editMeta.firstChangedLine }
+				: {}),
+		};
+	}
+	if (tracked.toolName === "bash") {
+		const rec = asRecord(rawOutput);
+		const exitCode =
+			typeof rec?.exitCode === "number"
+				? rec.exitCode
+				: typeof rec?.exit_code === "number"
+					? rec.exit_code
+					: undefined;
+		return exitCode === undefined ? undefined : { exitCode };
+	}
+	return undefined;
+}
+
+/**
+ * Identity key linking an approval echo to the execution frames of the same
+ * call when their `toolCallId`s differ (auto-approved runs execute under a
+ * `<session>:N` id): ACP kind + command line, or kind + target path.
+ */
+function echoTarget(update: ToolFrame): string | undefined {
+	const raw = asRecord(update.rawInput);
+	const kind = update.kind ?? "";
+	if (kind === "execute") {
+		const command = strOf(raw?.CommandLine ?? raw?.command_line ?? raw?.command);
+		return command ? `execute:${command}` : undefined;
+	}
+	const path =
+		strOf(raw?.TargetFile ?? raw?.file_path ?? raw?.path) ??
+		update.locations?.find(loc => loc.path)?.path ??
+		firstDiffPath(update);
+	return path ? `${kind}:${path}` : undefined;
+}
+
+/** Claim (consume) the pending echo matching this frame's kind+target. */
+function claimEchoByTarget(turn: AntigravityAcpTurn, update: ToolFrame): ToolFrame | undefined {
+	const target = echoTarget(update);
+	if (!target) return undefined;
+	const echo = turn.pendingByTarget.get(target);
+	if (echo) {
+		turn.pendingByTarget.delete(target);
+		turn.pendingFrames.delete(echo.toolCallId);
+	}
+	return echo;
+}
+
+function firstDiffPath(update: ToolFrame): string | undefined {
+	if (!Array.isArray(update.content)) return undefined;
+	for (const item of update.content) {
+		const rec = asRecord(item);
+		if (rec?.type === "diff" && typeof rec.path === "string") return rec.path;
+	}
+	return undefined;
+}
+
+/** Unified-diff details for the edit card, built once from the merged frame. */
+function editMetaFromFrame(
+	frame: ToolFrame,
+): { diff: string; op: "create" | "update"; path?: string; firstChangedLine?: number } | undefined {
+	const diff = firstDiff(frame);
+	if (!diff || (diff.oldText === undefined && diff.newText === undefined)) return undefined;
+	const raw = asRecord(frame.rawInput);
+	const path =
+		strOf(raw?.TargetFile ?? raw?.file_path ?? raw?.path) ??
+		frame.locations?.find(loc => loc.path)?.path ??
+		firstDiffPath(frame);
+	const op: "create" | "update" = diff.oldText === undefined ? "create" : "update";
+	const rendered = editDiffString(diff.oldText ?? "", diff.newText ?? "", path);
+	if (!rendered.diff) return undefined;
+	const line = raw?.StartLine;
+	const firstChangedLine =
+		typeof line === "number" && Number.isFinite(line)
+			? line
+			: (frame.locations?.find(loc => typeof loc.line === "number")?.line ?? rendered.firstChangedLine);
+	return { diff: rendered.diff, op, ...(path !== undefined ? { path } : {}), firstChangedLine };
 }
 
 /** Map an ACP tool frame onto the built-in tool's argument shape, for the TUI. */
