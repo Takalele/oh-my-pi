@@ -151,6 +151,47 @@ describe("antigravity-acp provider", () => {
 		sessions.clear();
 	});
 
+	it("carries the approval echo diff into the auto-approved card under the exec id", async () => {
+		useFakeAgent("auto");
+		const sessions = new Map<string, ProviderSessionState>();
+		const results: ToolResultMessage[] = [];
+		const stream = streamAntigravityAcp(model, context, {
+			cwd: configDir,
+			sessionId: "omp-session-auto",
+			providerSessionState: sessions,
+			cursorOnToolResult: result => {
+				results.push(result);
+				return result;
+			},
+		});
+		for await (const event of stream) void event;
+		const result = await stream.result();
+
+		// Auto-approved run: the echo (hex id) carries the diff, the run
+		// happens under `sess-fake-1:1` without one, and the echo closes
+		// with a "never executed" tombstone. One card, diff merged in, and
+		// the tombstone opened nothing.
+		const calls = result.content.filter(block => block.type === "toolCall");
+		expect(calls).toHaveLength(1);
+		const call = calls[0];
+		expect(call?.type === "toolCall" && call.id).toBe("sess-fake-1:1");
+		expect(call?.type === "toolCall" && call.arguments).toMatchObject({
+			path: "/tmp/hello.py",
+			newText: 'print("Hello, World!")\n',
+		});
+		expect(results).toHaveLength(1);
+		expect(results[0]).toMatchObject({
+			toolCallId: "sess-fake-1:1",
+			toolName: "edit",
+			isError: false,
+			details: { op: "create", path: "/tmp/hello.py" },
+		});
+		const diff = (results[0].details as { diff?: string } | undefined)?.diff ?? "";
+		expect(diff).toMatch(/^\+1\|print\("Hello, World!"\)/m);
+		for (const state of sessions.values()) state.close();
+		sessions.clear();
+	});
+
 	it("missing runtime surfaces the install hint instead of an implicit download", async () => {
 		delete process.env[ANTIGRAVITY_ACP_PATH_ENV];
 		delete process.env.ANTIGRAVITY_FAKE_MODE;

@@ -360,4 +360,35 @@ describe("EventController + Cursor todo bridge", () => {
 		expect(ctx.pendingTools.size).toBe(0);
 		expect(Bun.stripANSI(blocks[0]!.render(120).join("\n"))).toContain("AGENT_START_MATCH");
 	});
+
+	it("settles a server-executed card from its result message when no execution events fire", async () => {
+		// Providers that ran the tool themselves (Cursor exec, Antigravity ACP)
+		// emit no `tool_execution_start`/`_end` for the mirrored call: the card
+		// streams from the assistant blocks, and its result arrives as a
+		// standalone `toolResult` message right after the assistant closes.
+		// Without settling on `message_end`, the card animates forever and
+		// shows no output.
+		const f = createFixture();
+
+		await f.controller.handleEvent(streamedToolBlock("agy-edit-1", "edit", { path: "hello.py" }));
+		expect(f.blocks).toHaveLength(1);
+		expect(f.ctx.pendingTools.size).toBe(1);
+
+		await f.controller.handleEvent({
+			type: "message_end",
+			message: {
+				role: "toolResult",
+				toolCallId: "agy-edit-1",
+				toolName: "edit",
+				content: [{ type: "text", text: "Create hello.py" }],
+				details: { diff: '+1|print("Hello, World!")\n', op: "create", path: "hello.py" },
+				isError: false,
+				timestamp: 1,
+			},
+		} as Extract<AgentSessionEvent, { type: "message_end" }>);
+
+		expect(f.ctx.pendingTools.size).toBe(0);
+		const rendered = Bun.stripANSI(f.blocks[0]!.render(120).join("\n"));
+		expect(rendered).toContain('print("Hello, World!")');
+	});
 });

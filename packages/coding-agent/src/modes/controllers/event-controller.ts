@@ -1756,9 +1756,37 @@ export class EventController {
 		}
 	}
 
+	/**
+	 * Settle a streamed card for a provider-executed (resolved) tool call
+	 * from its synthesized result message. These calls never run through
+	 * `tool.execute`, so no `tool_execution_start`/`_end` fires and the
+	 * card would otherwise stream forever without its output. Mirrors
+	 * `#applyToolCompletion`'s settle bookkeeping.
+	 */
+	#attachOrphanedToolResult(message: Extract<AgentSessionEvent, { type: "message_end" }>["message"]): void {
+		if (message.role !== "toolResult") return;
+		const component = this.ctx.pendingTools.get(message.toolCallId);
+		if (!component) return;
+		component.updateResult(message, false, message.toolCallId);
+		this.ctx.pendingTools.delete(message.toolCallId);
+		this.#backgroundCallIds.delete(message.toolCallId);
+		if (message.toolName === "read") this.#clearReadToolCall(message.toolCallId);
+		this.ctx.ui.requestRender();
+	}
+
 	async #handleMessageEnd(event: Extract<AgentSessionEvent, { type: "message_end" }>): Promise<void> {
 		// The persistence slot exists before message_end notification, unlike
 		// tool_execution_end. Resolve HUD identity only after canonical append.
+		if (event.message.role === "toolResult") {
+			// Server-executed (resolved) provider tools — Cursor exec,
+			// Antigravity ACP — never emit `tool_execution_start`/`_end`, so
+			// their streamed cards sit in `pendingTools` until their
+			// synthesized result messages arrive right after the assistant
+			// message closes. Settle the matching card here; ordinary tools
+			// were already settled by `#handleToolExecutionEnd` (and dropped
+			// from `pendingTools`), so the lookup misses them.
+			this.#attachOrphanedToolResult(event.message);
+		}
 		if (event.message.role === "toolResult" && event.message.toolName === "todo" && !event.message.isError) {
 			const details = event.message.details as { op?: string; phases?: TodoPhase[] } | undefined;
 			if (details?.op !== "view" && details?.phases) {

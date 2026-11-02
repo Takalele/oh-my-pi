@@ -10,6 +10,10 @@
 
 - Added the `antigravity` provider (`antigravity-acp` API): drives Google's official Antigravity ACP binary as a model — local spawn, sign-in relay, session, streamed turns — with no omp-side Google credentials.
 
+### Changed
+
+- Antigravity agent tool calls now render as ordinary tool cards carrying the edit diff and command output instead of reasoning-lane status lines, and denied or re-issued approval echoes no longer open failed ghost cards.
+
 ## [18.14.1] - 2026-10-31
 
 ### Added

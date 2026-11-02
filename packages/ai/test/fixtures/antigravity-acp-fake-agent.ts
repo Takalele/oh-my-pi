@@ -185,6 +185,59 @@ async function main(): Promise<void> {
 					respond(id, { stopReason: "end_turn" });
 					break;
 				}
+				if (mode === "auto") {
+					// Auto-approved run (captured wire): the approval echo (hex
+					// id, carries the diff) is answered by execution under a
+					// DIFFERENT `<sid>:1` id whose frames carry only the path,
+					// then the echo closes with a failed "never executed"
+					// tombstone. The card must appear once, under `:1`, with
+					// the echo's diff, and the tombstone must not open a second.
+					notify("session/update", {
+						sessionId,
+						update: {
+							sessionUpdate: "tool_call",
+							toolCallId: "tc-auto-echo",
+							title: "Run create_file?",
+							kind: "edit",
+							status: "pending",
+							content: [{ type: "diff", path: "hello.py", newText: 'print("Hello, World!")\n' }],
+							locations: [{ path: "/tmp/hello.py" }],
+							rawInput: { TargetFile: "/tmp/hello.py", CodeContent: 'print("Hello, World!")\n' },
+						},
+					});
+					notify("session/update", {
+						sessionId,
+						update: {
+							sessionUpdate: "tool_call",
+							toolCallId: "sess-fake-1:1",
+							title: "Running edit_file",
+							kind: "edit",
+							status: "in_progress",
+							locations: [{ path: "/tmp/hello.py" }],
+							rawInput: { file_path: "/tmp/hello.py" },
+						},
+					});
+					notify("session/update", {
+						sessionId,
+						update: {
+							sessionUpdate: "tool_call_update",
+							toolCallId: "sess-fake-1:1",
+							status: "completed",
+							rawOutput: "Create hello.py",
+						},
+					});
+					notify("session/update", {
+						sessionId,
+						update: {
+							sessionUpdate: "tool_call_update",
+							toolCallId: "tc-auto-echo",
+							status: "failed",
+							rawOutput: "Tool call was approved but never executed.",
+						},
+					});
+					respond(id, { stopReason: "end_turn" });
+					break;
+				}
 				if (process.env.ANTIGRAVITY_FAKE_ECHO === "1") {
 					notify("session/update", {
 						sessionId,

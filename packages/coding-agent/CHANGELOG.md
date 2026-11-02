@@ -10,6 +10,10 @@
 
 - Added the ToS-compliant `antigravity` provider: `omp antigravity install|update|remove|status` manages Google's official Antigravity ACP runtime, `/login antigravity` signs in through the binary's own Google flow, and its plan-Gemini models appear in the picker like any other provider.
 
+### Fixed
+
+- Fixed live tool cards for server-executed provider tools (Cursor exec, Antigravity) staying pending without their diff or command output; the streamed card now settles from the paired result message
+
 ## [18.14.1] - 2026-10-31
 
 ### Added
