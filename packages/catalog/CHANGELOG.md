@@ -215,6 +215,8 @@
 ### Added
 
 - Added the `antigravity` provider: bundled plan-Gemini model rows driven by Google's official `antigravity-acp` binary, selectable like any other provider.
+- The `antigravity` model list now follows the signed-in account: the installed official binary's advertised `configOptions` roster replaces the bundled rows, so models your plan offers (e.g. extra Flash/Deep lanes) appear and unavailable SKUs disappear.
+
 
 ## [18.14.1] - 2026-10-31
 

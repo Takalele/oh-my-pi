@@ -7,8 +7,13 @@
 
 provider "antigravity" {
 	default-model "gemini-3.7-flash-high"
+	dynamic-models-authoritative #true
 	// The binary's own sign-in owns credentials; there is no env-var key and
-	// no HTTP discovery surface — the bundled rows are the catalog.
+	// no HTTP discovery surface. The runtime instead handshakes the installed
+	// official binary and reads its `configOptions` model select (see
+	// discovery/antigravity-acp.ts), so a successful live roster replaces the
+	// bundled seed rows; a failed handshake (missing install, signed out)
+	// keeps them.
 	seed api="antigravity-acp" base-url="https://antigravity.google" bundle="always" {
 		model "gemini-3.8-flash-high" name="Gemini 3.8 Flash (High)" {
 			reasoning #true

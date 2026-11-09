@@ -84,6 +84,7 @@ import {
 	zhipuCodingPlanModelManagerOptions,
 } from "./openai-compat";
 import {
+	antigravityAcpModelManagerOptions,
 	cloudflareWorkersAiModelManagerOptions,
 	cursorModelManagerOptions,
 	devinModelManagerOptions,
@@ -107,6 +108,7 @@ const MODEL_MANAGER_FACTORIES: Readonly<Partial<Record<KnownProvider, ModelManag
 	aimlapi: config => aimlApiModelManagerOptions(config),
 	"alibaba-coding-plan": config => alibabaCodingPlanModelManagerOptions(config),
 	"alibaba-token-plan": config => alibabaTokenPlanModelManagerOptions(config),
+	antigravity: config => antigravityAcpModelManagerOptions(config),
 	baseten: config => basetenModelManagerOptions(config),
 	"bedrock-mantle": config => bedrockMantleModelManagerOptions(config),
 	anthropic: config => anthropicModelManagerOptions(config),

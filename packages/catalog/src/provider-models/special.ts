@@ -16,6 +16,7 @@ import { getBundledModel } from "../models";
 import type { Api, FetchImpl, Model, ModelSpec } from "../types";
 import { DEVIN_DEFAULT_BASE_URL } from "../wire/devin";
 import { unionAccountCatalogs } from "./account-access";
+import type { ModelManagerConfig } from "./descriptor-types";
 import { toModelSpec } from "./bundled-references";
 import { resolveModelCacheProviderId } from "./cache-provider-id";
 
@@ -467,12 +468,45 @@ export function typesafeModelManagerOptions(config: TypeSafeModelManagerConfig =
 			: undefined),
 	};
 }
+
+// ---------------------------------------------------------------------------
+// Antigravity (official ACP binary)
+// ---------------------------------------------------------------------------
+
+/**
+ * The model roster is whatever the installed official `antigravity-acp`
+ * binary advertises in its `configOptions`; discovery is an ACP handshake,
+ * not an HTTP call. Without a signed-in marker credential the manager is
+ * never constructed (the registry gates on the stored credential), and a
+ * failed or timed-out handshake keeps the bundled rows.
+ */
+export function antigravityAcpModelManagerOptions(
+	config: ModelManagerConfig = {},
+): ModelManagerOptions<"antigravity-acp"> {
+	const { apiKey } = config;
+	return {
+		providerId: "antigravity",
+		cacheProviderId: resolveModelCacheProviderId("antigravity"),
+		staticModels: seedModels<"antigravity-acp">("antigravity"),
+		...(apiKey ? { dynamicModelsAuthoritative: true } : undefined),
+		...(apiKey
+			? {
+					fetchDynamicModels: async () => {
+						const { fetchAntigravityAcpModels } = await antigravityAcpDiscovery();
+						return fetchAntigravityAcpModels();
+					},
+				}
+			: undefined),
+	};
+}
+
+const antigravityAcpDiscovery = once(() => import("../discovery/antigravity-acp"));
+
 // ---------------------------------------------------------------------------
 // Zai
 // ---------------------------------------------------------------------------
 
 export interface ZaiModelManagerConfig {}
-
 /** Creates model-manager options for Z.AI's mixed native and Anthropic transports. */
 export function zaiModelManagerOptions(
 	_config: ZaiModelManagerConfig = {},
