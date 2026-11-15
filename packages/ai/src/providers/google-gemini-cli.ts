@@ -22,6 +22,7 @@ import { AssistantMessageEventStream } from "../utils/event-stream";
 import { extractGoogleValidationUrl, formatGoogleValidationRequiredMessage } from "../utils/google-validation";
 import type { RawHttpRequestDump } from "../utils/http-inspector";
 import { armPreResponseTimeout, getStreamFirstEventTimeoutMs, iterateWithIdleTimeout } from "../utils/idle-iterator";
+import { notifyProviderResponse } from "../utils/provider-response";
 // Refresh is the sole responsibility of AuthStorage (broker-aware, single-flighted);
 // the stream provider trusts the access token threaded through `options.apiKey`.
 import { StreamMarkupHealing, type StreamMarkupHealingEvent } from "../utils/stream-markup-healing";
@@ -33,6 +34,7 @@ import {
 	CONTINUATION_MAX_ATTEMPTS,
 	EMPTY_STREAM_BASE_DELAY_MS,
 	followGoogleContinuations,
+	googleStreamRequestId,
 	GoogleTextBlocks,
 	type GoogleThinkingLevel,
 	hasMeaningfulGoogleContent,
@@ -550,6 +552,9 @@ export const streamGoogleGeminiCli: StreamFunction<"google-gemini-cli"> = (
 				activeResponse: Response,
 				streamUrl: string,
 			): Promise<{ meaningful: boolean; strippedPlanningLeak: boolean }> => {
+				// Headers already passed the status check. Tell observers before the body
+				// is read; the pre-response watchdog was cleared by the caller.
+				await notifyProviderResponse(options, activeResponse, model, googleStreamRequestId(activeResponse));
 				if (!activeResponse.body) {
 					throw new AIError.ProviderResponseError("No response body", {
 						provider: model.provider,
@@ -662,6 +667,7 @@ export const streamGoogleGeminiCli: StreamFunction<"google-gemini-cli"> = (
 					} finally {
 						clearWatchdog?.();
 					}
+					await notifyProviderResponse(options, resumed, model, googleStreamRequestId(resumed));
 					return readSseJson<CloudCodeAssistResponseChunk>(resumed.body, responseSignal, sseObserver);
 				};
 				const chunks = iterateWithIdleTimeout(
