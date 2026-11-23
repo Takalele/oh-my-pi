@@ -259,8 +259,8 @@ if m:
 
 edit(
     "docs/settings.md",
-    ("(for example `google-antigravity`)", "(for example `openrouter`)"),
-    ("   unpausedProviders:\n      - google-antigravity", "   unpausedProviders:\n      - openrouter"),
+    ("(for example `google-antigravity`)", "(for example `<provider-id>`"),
+    ("   unpausedProviders:\n      - google-antigravity", "   unpausedProviders:\n      - <provider-id>"),
 )
 
 # changelog: drop the unreleased antigravity-cli entries (released sections are immutable)
@@ -287,8 +287,33 @@ echo "==> Regenerating rules.json"
 bun run gen:compat
 
 echo "==> Regenerating models.json (antigravity rows + strip dropped providers)"
-bun --cwd=packages/catalog run gen:models --provider antigravity
-bun - <<'EOF'
+# Decode first: full re-baking re-fetches live rosters and dirties unrelated
+# rows, so only touch models.json when there is actually work to do.
+need_strip=false
+rc=0
+bun - <<'EOF' || rc=$?
+import * as fs from "node:fs";
+import { getCatalogProviders, openModelCatalog } from "./packages/catalog/src/model-catalog-format.ts";
+
+const p = "packages/catalog/src/models.json";
+const catalog = openModelCatalog(JSON.parse(fs.readFileSync(p, "utf8")));
+const ids = getCatalogProviders(catalog);
+const dropped = ids.filter(id => id === "antigravity-cli" || id === "google-antigravity");
+if (dropped.length > 0) {
+	console.log(`    providers to strip: ${dropped.join(", ")}`);
+	process.exit(3);
+}
+console.log("    models.json: nothing to strip");
+EOF
+if [ "$rc" -eq 3 ]; then
+	need_strip=true
+elif [ "$rc" -ne 0 ]; then
+	echo "    error: failed to decode models.json (rc=$rc)" >&2
+	exit "$rc"
+fi
+if [ "$need_strip" = true ]; then
+	bun --cwd=packages/catalog run gen:models --provider antigravity
+	bun - <<'EOF'
 import * as fs from "node:fs";
 import {
 	encodeModelCatalog,
@@ -310,6 +335,7 @@ fs.writeFileSync(p, encodeModelCatalog(models as never));
 const check = openModelCatalog(JSON.parse(fs.readFileSync(p, "utf8")));
 console.log(`    providers: ${getCatalogProviders(check).length}, antigravity kept: ${!!getCatalogProvider(check, "antigravity")}`);
 EOF
+fi
 
 echo "==> Leftover scan"
 leftover=0
