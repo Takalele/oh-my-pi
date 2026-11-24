@@ -5,7 +5,7 @@ import * as path from "node:path";
 import { buildModel } from "@oh-my-pi/pi-catalog/build";
 import { ANTIGRAVITY_ACP_PATH_ENV } from "@oh-my-pi/pi-utils/antigravity";
 import { streamAntigravityAcp } from "@oh-my-pi/pi-ai/providers/antigravity-acp";
-import type { Context, Model, ProviderSessionState, ToolResultMessage } from "@oh-my-pi/pi-ai/types";
+import type { Context, Message, Model, ProviderSessionState, ToolResultMessage } from "@oh-my-pi/pi-ai/types";
 
 const model: Model<"antigravity-acp"> = buildModel({
 	id: "gemini-3.7-flash-high",
@@ -45,6 +45,7 @@ afterAll(async () => {
 	else process.env.ANTIGRAVITY_FAKE_MODE = previousFakeMode;
 	delete process.env.ANTIGRAVITY_FAKE_CHOICE_STYLE;
 	delete process.env.ANTIGRAVITY_FAKE_ECHO;
+	delete process.env.ANTIGRAVITY_FAKE_PROMPT_ECHO;
 	await fs.rm(configDir, { recursive: true, force: true });
 });
 
@@ -54,6 +55,7 @@ function useFakeAgent(mode?: string): void {
 	else process.env.ANTIGRAVITY_FAKE_MODE = mode;
 	delete process.env.ANTIGRAVITY_FAKE_CHOICE_STYLE;
 	delete process.env.ANTIGRAVITY_FAKE_ECHO;
+	delete process.env.ANTIGRAVITY_FAKE_PROMPT_ECHO;
 }
 
 describe("antigravity-acp provider", () => {
@@ -251,6 +253,66 @@ describe("antigravity-acp provider", () => {
 		const text = result.content.find(block => block.type === "text");
 		// Runtime 1.4 lists family bases; the tier travels as thought_level=low.
 		expect(text?.type === "text" && text.text).toContain("model=gemini-3.7-flash;level=low");
+		for (const state of sessions.values()) state.close();
+		sessions.clear();
+	});
+
+	it("replays this provider's own history but omits foreign-model assistant turns", async () => {
+		useFakeAgent();
+		process.env.ANTIGRAVITY_FAKE_PROMPT_ECHO = "1";
+		const emptyUsage = {
+			input: 0,
+			output: 0,
+			cacheRead: 0,
+			cacheWrite: 0,
+			totalTokens: 0,
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+		};
+		const messages: Message[] = [
+			{ role: "user", content: "earlier question", timestamp: 1 },
+			{
+				role: "assistant",
+				content: [{ type: "text", text: "earlier antigravity answer" }],
+				api: "antigravity-acp",
+				provider: "antigravity",
+				model: "gemini-3.7-flash-high",
+				usage: emptyUsage,
+				stopReason: "stop",
+				timestamp: 2,
+			},
+			{ role: "user", content: "switched-provider question", timestamp: 3 },
+			{
+				role: "assistant",
+				content: [{ type: "text", text: "foreign model answer" }],
+				api: "openai-completions",
+				provider: "openai",
+				model: "gpt-x",
+				usage: emptyUsage,
+				stopReason: "stop",
+				timestamp: 4,
+			},
+			{ role: "user", content: "current turn", timestamp: 5 },
+		];
+		const sessions = new Map<string, ProviderSessionState>();
+		const result = await streamAntigravityAcp(
+			model,
+			{ messages },
+			{
+				cwd: configDir,
+				sessionId: "omp-session-replay",
+				providerSessionState: sessions,
+			},
+		).result();
+		const text = result.content.find(block => block.type === "text");
+		const echoed = text?.type === "text" ? text.text : "";
+		// User turns replay (they are the user's own words on every provider)…
+		expect(echoed).toContain("User: earlier question");
+		expect(echoed).toContain("User: switched-provider question");
+		expect(echoed).toContain("current turn");
+		// …own-provider assistant turns replay…
+		expect(echoed).toContain("Assistant: earlier antigravity answer");
+		// …but a foreign model's assistant output never reaches the agent.
+		expect(echoed).not.toContain("foreign model answer");
 		for (const state of sessions.values()) state.close();
 		sessions.clear();
 	});

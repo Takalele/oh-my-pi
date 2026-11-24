@@ -238,6 +238,22 @@ async function main(): Promise<void> {
 					respond(id, { stopReason: "end_turn" });
 					break;
 				}
+				if (process.env.ANTIGRAVITY_FAKE_PROMPT_ECHO === "1") {
+					// Mirror the text blocks the client sent, so tests can assert
+					// exactly what reached the agent (replay filter, model id, ...).
+					const sentBlocks = (params.prompt ?? []) as { type?: string; text?: string }[];
+					const echoed = sentBlocks
+						.filter(block => block.type === "text")
+						.map(block => block.text ?? "")
+						.join("\n");
+					notify("session/update", {
+						sessionId,
+						update: {
+							sessionUpdate: "agent_message_chunk",
+							content: { type: "text", text: `PROMPT_ECHO_START\n${echoed}\nPROMPT_ECHO_END` },
+						},
+					});
+				}
 				if (process.env.ANTIGRAVITY_FAKE_ECHO === "1") {
 					notify("session/update", {
 						sessionId,

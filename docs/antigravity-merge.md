@@ -87,6 +87,14 @@ packages/ai/test/{auth-storage-antigravity-selection,provider-login-warning}.tes
   `packages/catalog/src/model-catalog-format.ts`) — the same one-liner the script runs.
   **Do not** run full `gen:models` without `--provider`: live discovery re-bakes every provider's
   rows and drifts the committed snapshot (e.g. the OpenRouter roster) off upstream.
+  Since upstream `39c050d4ad` (Nov 2026) renamed the branch's `google-gemini-cli` provider to
+  `google-antigravity`, the upstream snapshot no longer carries the branch-owned rows. After the
+  strip, splice the `antigravity` and `google-gemini-cli` rows back in from
+  `git show HEAD:packages/catalog/src/models.json` through the same codec. Verify afterwards:
+  every shared provider's model set is identical to the upstream snapshot, `antigravity-cli`
+  and `google-antigravity` are absent, and the only-ours providers are exactly
+  `{antigravity, google-gemini-cli}`. The helper script does the strip + rebake but not the
+  splice — run it by hand when upstream removes (or renames) a branch-owned provider.
 
 ### 5. Tests that reference the deleted providers
 

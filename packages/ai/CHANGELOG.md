@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- The `antigravity` provider no longer feeds assistant replies from another provider into the official Antigravity agent when a session is rebuilt — the history replay now omits turns produced outside `antigravity`, keeping the `oauth-personal` path to this provider's own conversation.
+
 ### Fixed
 
 - GitHub Copilot Gemini models no longer fail every request with `400 invalid request body` when an MCP tool schema declares a `type` array (e.g. `["string", "null"]`); tool schemas are rewritten into Gemini's schema dialect ([#20198](https://github.com/can1357/oh-my-pi/issues/20198))

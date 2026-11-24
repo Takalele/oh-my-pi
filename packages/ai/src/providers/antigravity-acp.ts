@@ -900,10 +900,17 @@ function buildPromptBlocks(
 	}
 	const blocks: ContentBlock[] = [];
 	if (session.configOptions.length > 0 && hasPriorTurns(messages, lastUser)) {
+		// Replay the user's own words, but omit assistant turns produced by
+		// another provider: on `oauth-personal` the agent may see this
+		// session's conversation, not a foreign provider's model output.
+		// (Per-provider, not per-model: a Gemini SKU switch within
+		// `antigravity` still replays its prior turn.)
 		let budget = REPLAY_CHAR_BUDGET - REPLAY_NOTE.length;
 		const prior: ContentBlock[] = [];
 		for (let i = lastUser - 1; i >= 0 && budget > 0; i--) {
-			const rendered = renderHistoryMessage(messages[i]);
+			const message = messages[i];
+			if (message.role === "assistant" && message.provider !== ANTIGRAVITY_ACP_PROVIDER_ID) continue;
+			const rendered = renderHistoryMessage(message);
 			if (!rendered) continue;
 			const text = rendered.text.slice(0, budget);
 			budget -= rendered.text.length;
