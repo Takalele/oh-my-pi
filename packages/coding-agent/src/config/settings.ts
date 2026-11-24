@@ -440,6 +440,45 @@ function pathMatchesPrefix(cwd: string, prefix: string): boolean {
 	return relative === "" || (!!relative && !relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
+/**
+ * Phonon voice replacing each retired Kokoro voice family, keyed by Kokoro's
+ * accent/gender prefix (`af_heart` → American female → `harper`).
+ */
+const PHONON_VOICE_FOR_KOKORO_PREFIX: Record<string, string> = {
+	af_: "harper",
+	am_: "easton",
+	bf_: "maeve",
+	bm_: "edwin",
+};
+
+/**
+ * Local TTS moved from Kokoro-82M to Phonon 31M: rewrite configured Kokoro
+ * voice ids (`tts.localVoice`, `speech.voice`) to the Phonon voice of the same
+ * accent and gender, and a `local/kokoro` speech role to `local/phonon-31m`.
+ * Handles nested and quoted-dotted sources.
+ */
+function migrateKokoroSpeechSettings(raw: RawSettings): void {
+	const phononVoice = (value: unknown): string | undefined =>
+		typeof value === "string" ? PHONON_VOICE_FOR_KOKORO_PREFIX[value.slice(0, 3)] : undefined;
+	const phononRole = (value: unknown): unknown =>
+		value === "local/kokoro"
+			? "local/phonon-31m"
+			: Array.isArray(value)
+				? value.map(entry => (entry === "local/kokoro" ? "local/phonon-31m" : entry))
+				: value;
+	const leaves: Array<[root: string, leaf: string, migrate: (value: unknown) => unknown]> = [
+		["tts", "localVoice", value => phononVoice(value) ?? value],
+		["speech", "voice", value => phononVoice(value) ?? value],
+		["modelRoles", "speech", phononRole],
+	];
+	for (const [root, leaf, migrate] of leaves) {
+		const rootObj = raw[root];
+		if (isRecord(rootObj) && leaf in rootObj) rootObj[leaf] = migrate(rootObj[leaf]);
+		const dotted = `${root}.${leaf}`;
+		if (dotted in raw) raw[dotted] = migrate(raw[dotted]);
+	}
+}
+
 function stringArrayFromUnknown(value: unknown): string[] {
 	if (typeof value === "string") return [value];
 	if (Array.isArray(value)) return value.filter((item): item is string => typeof item === "string");
@@ -2151,6 +2190,45 @@ export class Settings {
 		this.#updateRuntimeModelRoleOverride(role, undefined);
 	}
 
+	/** Replace roles in the configured storage layer and synchronize runtime overrides. */
+	replaceModelRoles(modelRoles: ReadOnlyDict<string>): void {
+		const project = cfgModelRoleStorage.get(this) === "project";
+		const roles = new Set([...Object.keys(this.getModelRoles()), ...Object.keys(modelRoles)]);
+		for (const role of roles) {
+			const value = Object.hasOwn(modelRoles, role) ? modelRoles[role] : undefined;
+			if (project) {
+				if (value !== undefined) this.setProjectModelRole(role, value);
+				else if (this.getProjectModelRole(role) || this.getModelRoleProvenance(role) === "runtime") {
+					this.clearProjectModelRole(role);
+				}
+			} else if (
+				value !== undefined ||
+				this.getGlobalModelRole(role) !== undefined ||
+				this.getModelRoleProvenance(role) === "runtime"
+			) {
+				this.setModelRole(role, value);
+			}
+		}
+	}
+
+	/**
+	 * Detached in-memory copy with {@link replaceModelRoles} applied: same layer precedence, no saves,
+	 * no notifications. Read its roles and their provenance; never write through it.
+	 */
+	previewModelRoles(modelRoles: ReadOnlyDict<string>): Settings {
+		const preview = new Settings({ inMemory: true, cwd: this.#cwd, agentDir: this.#agentDir }, { projection: true });
+		preview.#parent = this.#parent;
+		// The role mutators replace their layer's modelRoles map instead of editing it in place.
+		preview.#global = { ...this.#global };
+		preview.#project = { ...this.#project };
+		preview.#configOverlay = this.#configOverlay;
+		preview.#overrides = { ...this.#overrides };
+		preview.#savedRuntimeModelRoleOverrides = new Map(this.#savedRuntimeModelRoleOverrides);
+		preview.#remerge();
+		preview.replaceModelRoles(modelRoles);
+		return preview;
+	}
+
 	/**
 	 * Get a model role (helper for modelRoles record).
 	 */
@@ -3622,13 +3700,13 @@ export class Settings {
 			delete raw["task.completionProbeMs"];
 		}
 
-		// Early per-agent toggles were persisted as booleans even though the
-		// runtime record contract is "on"/"off"/model pattern. Normalize each
-		// layer before merging so project-level false still overrides global true.
+		// Per-agent records accept booleans from early persisted toggles and
+		// hand-written YAML, though the runtime contract is "on"/"off"/model pattern.
+		// Normalize each layer before merging so project-level false still overrides global true.
 		{
 			const taskObj = isRecord(raw.task) ? raw.task : undefined;
 			if (taskObj) {
-				for (const key of ["agentPrewalk", "agentAdvisor"]) {
+				for (const key of ["agentPrewalk", "agentAdvisor", "agentPrewalkAuto"]) {
 					const overrides = isRecord(taskObj[key]) ? taskObj[key] : undefined;
 					if (!overrides) continue;
 					for (const agentName in overrides) {
@@ -3659,9 +3737,11 @@ export class Settings {
 			value => typeof value === "number" && Number.isFinite(value),
 		);
 
+		migrateKokoroSpeechSettings(raw);
+
 		// BM25 tool discovery removal: tools.discoveryMode / tools.essentialOverride /
 		// mcp.discoveryMode / mcp.discoveryDefaultServers are gone with no
-		// replacement (`tools.xdev` stays at its own default). Dead keys are
+		// replacement (`tools.commands` stays at its own default). Dead keys are
 		// deleted so they stop lingering in config.yml.
 		const toolsObj = raw.tools as Record<string, unknown> | undefined;
 		if (toolsObj) {
@@ -3972,6 +4052,21 @@ export class Settings {
 			}
 		}
 		delete raw["computer.backend"];
+
+		// computer.backgroundFallback became computer.takeover, which added the
+		// opt-in `foreground` and `always` modes. `refuse` carries over; the old
+		// `takeover` is the default `fallback`, so it is dropped.
+		const computerSettings = isRecord(raw.computer) ? raw.computer : undefined;
+		const fallback = computerSettings?.backgroundFallback ?? raw["computer.backgroundFallback"];
+		if (fallback === "refuse" && computerSettings?.takeover === undefined && raw["computer.takeover"] === undefined) {
+			if (computerSettings) computerSettings.takeover = "refuse";
+			else raw.computer = { takeover: "refuse" };
+		}
+		if (computerSettings) {
+			delete computerSettings.backgroundFallback;
+			if (Object.keys(computerSettings).length === 0) delete raw.computer;
+		}
+		delete raw["computer.backgroundFallback"];
 
 		delete raw["hindsight.mentalModelRefreshIntervalMs"];
 

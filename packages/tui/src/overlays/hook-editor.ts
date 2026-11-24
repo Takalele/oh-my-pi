@@ -8,8 +8,9 @@
  * - Prompt-style (ask): Enter submits, Shift+Enter inserts newline, legacy ask chrome
  */
 import type { ImageContent } from "@oh-my-pi/pi-ai";
-import { compactImageMarkers, formatVisionMarker, PLACEHOLDER_REGEX } from "../prompt/composer-attachments";
-import { extractImagePastePathsFromText } from "../prompt/custom-editor";
+import { compactImageAttachments, formatVisionMarker, PLACEHOLDER_REGEX } from "../prompt/composer-attachments";
+import { classifyImagePaste } from "../prompt/custom-editor";
+import { OrderedPastes } from "../prompt/ordered-pastes";
 import {
 	Editor,
 	Ellipsis,
@@ -99,6 +100,10 @@ export interface HookEditorOptions {
 	 * hint out of view.
 	 */
 	maxHeight?: number;
+	/** Called on the inner editor once it is built, e.g. to wire Vim mode's clipboard and cursor shape. */
+	configureEditor?: (editor: Editor) => void;
+	/** Vim-style modal editing in the inner editor; Escape then leaves Insert mode before it cancels. */
+	vimMode?: boolean;
 }
 
 /** Interactive multiline dialog used by hooks and the ask tool's Other response. */
@@ -115,8 +120,11 @@ export class HookEditorComponent extends OverlayPanel implements Focusable {
 	#onPasteImage: HookEditorOptions["onPasteImage"];
 	#onPasteImagePath: HookEditorOptions["onPasteImagePath"];
 	#pasteHandler = new BracketedPasteHandler();
-	#pendingPastes: { settled: boolean; text: string | undefined }[] = [];
-	#submitQueued = false;
+	#pastes = new OrderedPastes({
+		deliver: text => this.#editor.pasteText(text),
+		run: () => this.#submitCurrentText(true),
+		live: () => !this.#disposed,
+	});
 	#disposed = false;
 	/** Head, field and action bar; every part but the editor (which describes itself) is fixed, so it is built once. */
 	#nativeRoot: NativeNode;
@@ -152,6 +160,8 @@ export class HookEditorComponent extends OverlayPanel implements Focusable {
 
 		// Editor
 		this.#editor = new Editor(getEditorTheme());
+		options?.configureEditor?.(this.#editor);
+		this.#editor.setVimMode(options?.vimMode === true);
 		if (this.#promptStyle) {
 			this.#editor.setBorderVisible(false);
 			this.#editor.setPromptGutter("> ");
@@ -302,16 +312,13 @@ export class HookEditorComponent extends OverlayPanel implements Focusable {
 			// Hosts reserve ordered delivery synchronously inside these callbacks, so input
 			// that followed the paste in this chunk (e.g. Enter) still waits for the image.
 			const content = paste.pasteContent;
-			const acceptsImages = this.acceptsImages;
-			if (acceptsImages && content.length === 0 && this.#onPasteImage) {
+			const image = this.acceptsImages ? classifyImagePaste(content) : undefined;
+			if (image?.kind === "clipboard" && this.#onPasteImage) {
 				void this.#onPasteImage();
+			} else if (image?.kind === "paths" && this.#onPasteImagePath) {
+				for (const path of image.paths) void this.#onPasteImagePath(path);
 			} else {
-				const imagePaths = acceptsImages ? extractImagePastePathsFromText(content) : undefined;
-				if (imagePaths && this.#onPasteImagePath) {
-					for (const path of imagePaths) void this.#onPasteImagePath(path);
-				} else {
-					this.pasteText(content);
-				}
+				this.pasteText(content);
 			}
 			if (paste.remaining.length > 0) this.handleInput(paste.remaining);
 			return;
@@ -325,10 +332,7 @@ export class HookEditorComponent extends OverlayPanel implements Focusable {
 
 	#submitCurrentText(requireText = false): void {
 		if (this.#disposed) return;
-		if (this.#pendingPastes.length > 0) {
-			this.#submitQueued = true;
-			return;
-		}
+		if (this.#pastes.holdAction()) return;
 		const { text, images } = this.#currentValue();
 		if (requireText && text.trim().length === 0) return;
 		this.dispose();
@@ -340,9 +344,7 @@ export class HookEditorComponent extends OverlayPanel implements Focusable {
 	#currentValue(): { text: string; images: ImageContent[] | undefined } {
 		const text = this.#editor.getExpandedText();
 		if (this.#images.length === 0) return { text, images: undefined };
-		const compacted = compactImageMarkers(text, this.#images.length, { byAppearance: true });
-		if (!compacted) return { text, images: this.#images };
-		return { text: compacted.text, images: compacted.keep.map(index => this.#images[index]) };
+		return compactImageAttachments(text, this.#images);
 	}
 
 	/** Whether this prompt opted into clipboard image attachments. */
@@ -360,34 +362,13 @@ export class HookEditorComponent extends OverlayPanel implements Focusable {
 	/** Reserve ordered clipboard delivery. Completion accepts nonempty text once, or releases on undefined. */
 	beginPaste(): (text: string | undefined) => boolean {
 		if (this.#disposed) return () => false;
-		const pending: { settled: boolean; text: string | undefined } = { settled: false, text: undefined };
-		this.#pendingPastes.push(pending);
-		return text => {
-			if (this.#disposed || pending.settled) return false;
-			pending.settled = true;
-			pending.text = text;
-			// A failed/empty read releases the wait, but must not submit an answer.
-			if (!text) this.#submitQueued = false;
-			let delivered = 0;
-			for (const paste of this.#pendingPastes) {
-				if (!paste.settled) break;
-				if (paste.text) this.#editor.pasteText(paste.text);
-				delivered++;
-			}
-			if (delivered > 0) this.#pendingPastes.splice(0, delivered);
-			if (this.#pendingPastes.length === 0 && this.#submitQueued) {
-				this.#submitQueued = false;
-				this.#submitCurrentText(true);
-			}
-			return !!text;
-		};
+		return this.#pastes.begin();
 	}
 
 	override dispose(): void {
 		if (this.#disposed) return;
 		this.#disposed = true;
-		this.#submitQueued = false;
-		this.#pendingPastes.length = 0;
+		this.#pastes.clear();
 		super.dispose();
 	}
 
@@ -398,14 +379,18 @@ export class HookEditorComponent extends OverlayPanel implements Focusable {
 		else this.#onCancelCallback(text);
 	}
 
+	/** The inner editor, which holds the keys while the prompt is focused. */
+	activeEditor(): Editor {
+		return this.#editor;
+	}
+
 	/** Route non-bracketed paste transports (e.g. kitty's OSC 5522 enhanced clipboard)
 	 *  into the inner editor, mirroring bracketed-paste semantics. Without this hook,
 	 *  enhanced-paste routing falls back to the main prompt editor hidden behind the
 	 *  dialog (#2127 routing contract). */
 	pasteText(text: string): void {
 		if (this.#disposed) return;
-		if (this.#pendingPastes.length > 0) this.beginPaste()(text);
-		else this.#editor.pasteText(text);
+		this.#pastes.paste(text);
 	}
 
 	/** Replace the draft, as Ctrl+R history search does for the main composer. */
@@ -431,7 +416,8 @@ export class HookEditorComponent extends OverlayPanel implements Focusable {
 
 		// Prompt-style keeps Escape as an explicit cancel key and also honors app.interrupt remaps.
 		if (matchesKey(keyData, "escape") || matchesKey(keyData, "esc") || matchesAppInterrupt(keyData)) {
-			this.#cancel();
+			if (this.#vimTakesEscape(keyData)) this.#editor.handleInput(keyData);
+			else this.#cancel();
 			return;
 		}
 
@@ -469,7 +455,8 @@ export class HookEditorComponent extends OverlayPanel implements Focusable {
 
 		// Escape to cancel
 		if (matchesAppInterrupt(keyData)) {
-			this.#cancel();
+			if (this.#vimTakesEscape(keyData)) this.#editor.handleInput(keyData);
+			else this.#cancel();
 			return;
 		}
 
@@ -481,6 +468,11 @@ export class HookEditorComponent extends OverlayPanel implements Focusable {
 
 		// Forward to editor
 		this.#editor.handleInput(keyData);
+	}
+
+	/** In Vim mode Escape first leaves Insert mode or cancels a half-typed command; only then does it cancel. */
+	#vimTakesEscape(keyData: string): boolean {
+		return (matchesKey(keyData, "escape") || matchesKey(keyData, "esc")) && this.#editor.vimConsumesEscape();
 	}
 
 	async #openExternalEditor(): Promise<void> {

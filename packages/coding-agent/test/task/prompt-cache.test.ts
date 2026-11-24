@@ -325,6 +325,7 @@ describe("task sibling prompt-cache routing", () => {
 					const result = await tool.execute(name, {
 						name,
 						task: `Review ${name}.`,
+						outputSchema: {},
 					});
 					expect(result.isError, JSON.stringify(result)).not.toBe(true);
 					expect(result.details?.results[0]?.exitCode, JSON.stringify(result)).toBe(0);
@@ -524,7 +525,11 @@ describe("task sibling prompt-cache routing", () => {
 				// boundary verbatim; only the derivation step may decline to use it.
 				expect(parent.getPromptCacheKeyForModel(parent.agent.state.model)).toBe("");
 				const tool = parent.getToolByName("task") as TaskTool;
-				const result = await tool.execute(childName, { name: childName, task: "Review the sibling." });
+				const result = await tool.execute(childName, {
+					name: childName,
+					task: "Review the sibling.",
+					outputSchema: {},
+				});
 				expect(result.isError, JSON.stringify(result)).not.toBe(true);
 				expect(result.details?.results[0]?.exitCode, JSON.stringify(result)).toBe(0);
 			}
@@ -645,7 +650,7 @@ describe("task sibling prompt-cache routing", () => {
 		async function runTask(tool: TaskTool, name: string) {
 			inTaskExecute = true;
 			try {
-				const result = await tool.execute(name, { name, task: `Review ${name}.` });
+				const result = await tool.execute(name, { name, task: `Review ${name}.`, outputSchema: {} });
 				expect(result.isError, JSON.stringify(result)).not.toBe(true);
 				expect(result.details?.results[0]?.exitCode, JSON.stringify(result)).toBe(0);
 			} finally {
@@ -786,7 +791,7 @@ describe("task sibling prompt-cache routing", () => {
 					agentDir: directory.path(),
 					authStorage,
 					modelPattern: requested,
-					modelPatternAuthFallback: `${provider}/${modelId}`,
+					modelPatternParentFallback: `${provider}/${modelId}`,
 					taskPromptCacheKey: "parent:task",
 					sessionManager: SessionManager.inMemory(directory.path()),
 					settings: Settings.isolated({

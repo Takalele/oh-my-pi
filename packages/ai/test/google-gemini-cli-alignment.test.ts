@@ -338,12 +338,9 @@ describe("Google Gemini CLI alignment", () => {
 		]);
 		expect(result.content[0]).toEqual({ type: "text", text: "answer" });
 
-		const payload = buildRequest(
-			model,
-			{ messages: [...createContext().messages, result] },
-			"proj-123",
-			{},
-		) as { request: { contents: Array<{ role: string; parts: unknown[] }> } };
+		const payload = buildRequest(model, { messages: [...createContext().messages, result] }, "proj-123", {}) as {
+			request: { contents: Array<{ role: string; parts: unknown[] }> };
+		};
 		expect(payload.request.contents.find(content => content.role === "model")?.parts).toEqual([
 			{ text: "answer" },
 			{ thought: true, text: "", thoughtSignature: thoughtSig },

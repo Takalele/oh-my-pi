@@ -81,10 +81,10 @@ import { refreshAgentDiscovery } from "../../task";
 import { sumSubagentTreeCost } from "../agent-hub-runtime";
 import { AUTO_THINKING, parseConfiguredThinkingLevel } from "@oh-my-pi/pi-tui/thinking";
 import {
-	blockText,
 	choiceValue,
 	defaultFormData,
 	fieldQuestions,
+	formContext,
 	type HtmlFormData,
 	type HtmlFormValue,
 	isArrayChoice,
@@ -113,6 +113,7 @@ import {
 import { ACP_TERMINAL_AUTH_FLAG } from "./terminal-auth";
 
 import { cfgDisabledExtensions, cfgExtensions } from "../../extensibility/settings";
+import { cfgMcpStartupTimeoutMs } from "../../mcp/settings";
 import { cfgPlanEnabled } from "../../plan-mode/settings";
 
 const ACP_DEFAULT_MODE_ID = "default";
@@ -659,24 +660,6 @@ async function elicitFromAcpClient(
 }
 
 /**
- * The elicitation message for an HTML form: its section titles and context
- * blocks (paragraphs, lists, preformatted text, tables) as plain text, the
- * fields themselves being schema properties.
- */
-function formElicitationMessage(form: HtmlForm): string {
-	const parts: string[] = [];
-	for (const section of form.sections) {
-		const title = spansText(section.title).trim();
-		if (title) parts.push(title);
-		for (const block of section.blocks) {
-			const text = blockText(block);
-			if (text) parts.push(text);
-		}
-	}
-	return parts.filter(part => part.trim()).join("\n\n") || "Fill in the form";
-}
-
-/**
  * Property holding each "Other" choice field's free-text answer:
  * `<name>__other` ({@link OTHER_SUFFIX}), with more underscores while another
  * control already uses it.
@@ -965,7 +948,8 @@ export function createAcpExtensionUiContext(
 				connection,
 				getSessionId(),
 				"formDialog",
-				formElicitationMessage(form),
+				// Section titles and captions already title the field properties ({@link formContext}).
+				formContext(form).join("\n\n") || "Fill in the form",
 				properties,
 				required.length > 0 ? required : undefined,
 				{
@@ -2579,7 +2563,7 @@ export class AcpAgent implements Agent {
 				reentry: previous !== undefined,
 			});
 			// Mirror `InteractiveMode.#enterPlanMode`: register the plan-proposal
-			// handler that consumes `xd://propose` writes from plan mode. Without
+			// handler that consumes `propose` submissions from plan mode. Without
 			// this, proposal dispatch falls through and plan mode has no approval
 			// path (issue #1869).
 			session.setPlanProposalHandler?.(title => this.#handleAcpPlanProposal(record, title));
@@ -2591,11 +2575,11 @@ export class AcpAgent implements Agent {
 
 	/**
 	 * Plan-proposal handler installed while ACP plan mode is active. The agent
-	 * submits the finalized plan by writing its `<slug>`/title to
-	 * `xd://propose`; this handler validates the plan file, normalizes the
-	 * title, asks the ACP client to confirm (via `unstable_createElicitation`
-	 * when supported), and on approval keeps the chosen plan path, exits plan
-	 * mode, and notifies the client so the agent regains full tools.
+	 * submits the finalized plan by passing its `<slug>`/title to `propose`;
+	 * this handler validates the plan file, normalizes the title, asks the ACP
+	 * client to confirm (via `unstable_createElicitation` when supported), and
+	 * on approval keeps the chosen plan path, exits plan mode, and notifies the
+	 * client so the agent regains full tools.
 	 *
 	 * Mirrors `InteractiveMode.#handlePlanProposal` for the parts the agent sees
 	 * (same `PlanApprovalDetails` shape). Clients without form-mode elicitation
@@ -2636,7 +2620,7 @@ export class AcpAgent implements Agent {
 				content: [
 					{
 						type: "text" as const,
-						text: `Plan refinement requested. Update the plan file, then write ${normalizedTitle} to xd://propose again when ready.`,
+						text: `Plan refinement requested. Update the plan file, then submit ${normalizedTitle} with \`propose\` again when ready.`,
 					},
 				],
 				details,
@@ -2881,7 +2865,7 @@ export class AcpAgent implements Agent {
 
 	/**
 	 * Reload plugin/registry state for an ACP session. Mirrors the interactive
-	 * `/reload-plugins` and `/move` flows: invalidates the plugin-roots cache,
+	 * `/reload-plugins` flow: invalidates the plugin-roots cache,
 	 * refreshes task agents, resets the capability cache, refreshes the
 	 * session's slash-command state, then re-advertises commands so the client
 	 * sees newly installed/disabled plugins.
@@ -3472,7 +3456,14 @@ export class AcpAgent implements Agent {
 			};
 		}
 
-		const result = await manager.connectServers(configs, sources);
+		// Honor the user's startup window like the interactive path does
+		// (`sdk.ts`); `OMP_MCP_STARTUP_TIMEOUT_MS` still takes precedence.
+		const result = await manager.connectServers(
+			configs,
+			sources,
+			undefined,
+			cfgMcpStartupTimeoutMs.get(record.session.settings),
+		);
 		// A client-declared server whose initial connect fails (e.g. an expired
 		// client-owned bearer answering 401 inside the startup window) must not
 		// abort session creation: the record keeps the manager with the failed

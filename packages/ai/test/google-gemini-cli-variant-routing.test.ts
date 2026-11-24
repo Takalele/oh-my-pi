@@ -123,7 +123,6 @@ async function captureRequest(
 }
 
 describe("google-gemini-cli effort-tier variant routing", () => {
-
 	it("routes each effort to its backing wire id with the per-tier budget and attributes usage to the logical id", async () => {
 		const high = await captureRequest(collapsedFlashModel(), Effort.High);
 		expect(high.body.model).toBe("gemini-3-flash-agent");

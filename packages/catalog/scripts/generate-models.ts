@@ -69,14 +69,14 @@ const prevModelsJson: Record<string, Record<string, Model<Api>>> = Object.fromEn
 );
 
 /**
- * Local/self-hosted providers (Ollama, vLLM, LM Studio, LiteLLM). Their model
+ * Local/self-hosted providers (Ollama, vLLM, LM Studio, LiteLLM, Bifrost). Their model
  * catalogs are whatever happens to be running on the machine that invokes the
  * generator — bundling them would leak machine-specific endpoints (e.g.
  * `http://localhost:4000/v1`) into the committed snapshot. They are discovered
  * dynamically at runtime instead, so they are never fetched during generation
  * and never written to models.json.
  */
-const DISCOVERY_ONLY_PROVIDERS = new Set(["ollama", "vllm", "lm-studio", "litellm"]);
+const DISCOVERY_ONLY_PROVIDERS = new Set(["ollama", "vllm", "lm-studio", "litellm", "bifrost"]);
 /**
  * Credential-scoped catalogs (Devin's Cascade roster is gated per account/team
  * via `allowed_model_uids`). Fetching them during generation would bake one
@@ -88,14 +88,15 @@ const DISCOVERY_ONLY_PROVIDERS = new Set(["ollama", "vllm", "lm-studio", "litell
  * runtime discovery is authoritative per credential (mirrors the GitLab Duo
  * fallback-only policy below).
  */
-const CREDENTIAL_SCOPED_PROVIDERS = new Set(["devin", "sambanova", "otari"]);
+const CREDENTIAL_SCOPED_PROVIDERS = new Set(["devin", "sambanova", "otari", "modal"]);
 /**
  * Providers whose authored seed is the complete documented fallback
  * catalog: their previous-snapshot rows are never resurrected, so an id
  * the host retired (e.g. CoralBricks' GLM 5.3 Flash, 2026-10-07) cannot
- * return as a previous-snapshot zombie.
+ * return as a previous-snapshot zombie. `local` lists exactly the on-device
+ * workers this build ships, so a replaced one (Kokoro → Phonon) drops out.
  */
-const STATIC_SEED_COMPLETE_PROVIDERS = new Set(["yolo-auto", "coralbricks"]);
+const STATIC_SEED_COMPLETE_PROVIDERS = new Set(["yolo-auto", "coralbricks", "local"]);
 
 /**
  * The rows one provider's authored seed (`rules/providers/<id>.kdl`) contributes
@@ -500,6 +501,14 @@ async function fetchCodexDiscoveryModels(): Promise<ModelSpec<"openai-codex-resp
 }
 
 async function generateModels(selectedProvider?: string) {
+	// Retire a single provider without refreshing unrelated model rows.
+	if (selectedProvider !== undefined && isRetiredProvider(selectedProvider)) {
+		const models = { ...prevModelsJson };
+		delete models[selectedProvider];
+		await Bun.write(path.join(packageRoot, "src/models.json"), encodeModelCatalog(models));
+		console.log(`Removed ${selectedProvider} from src/models.json`);
+		return;
+	}
 	// Fetch models from dynamic sources.
 	const modelsDevModels = await loadModelsDevData();
 	const catalogProviderDescriptors = PROVIDER_DESCRIPTORS.filter(
@@ -619,9 +628,12 @@ async function generateModels(selectedProvider?: string) {
 	allModels = applyFireworksDeepSeekReasoningShape(allModels);
 	allModels = filterModelsDevCatalogRows(allModels);
 	// Previous-snapshot fallbacks keep their old baseUrl; re-base every OpenCode
-	// Go row so retained rows follow gateway endpoint moves (#15722).
+	// Go row so retained rows follow gateway endpoint moves (#15722). System One
+	// judge rows are not served by the Go gateway; they keep their seeded endpoint.
 	allModels = allModels.map(model =>
-		model.provider === "opencode-go" ? { ...model, baseUrl: openCodeGoBaseUrlForApi(model.api) } : model,
+		model.provider === "opencode-go" && model.api !== "typesafe"
+			? { ...model, baseUrl: openCodeGoBaseUrlForApi(model.api) }
+			: model,
 	);
 	// Normalize display names: gateway author prefixes ("OpenAI: …"), alias
 	// markers ("(latest)"), provider attribution, and

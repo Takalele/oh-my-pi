@@ -8,15 +8,7 @@ import { calculateCost } from "@oh-my-pi/pi-catalog/models";
 import { getGeminiCliHeaders } from "@oh-my-pi/pi-catalog/wire/gemini-headers";
 import { fetchWithRetry, readSseJson, type SseEventObserver } from "@oh-my-pi/pi-utils";
 import * as AIError from "../error";
-import type {
-	Api,
-	AssistantMessage,
-	Context,
-	Model,
-	StreamFunction,
-	StreamOptions,
-	ToolCall,
-} from "../types";
+import type { Api, AssistantMessage, Context, Model, StreamFunction, StreamOptions, ToolCall } from "../types";
 import { normalizeSystemPrompts } from "../utils";
 import { AssistantMessageEventStream } from "../utils/event-stream";
 import { extractGoogleValidationUrl, formatGoogleValidationRequiredMessage } from "../utils/google-validation";

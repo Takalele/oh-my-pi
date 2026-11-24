@@ -323,6 +323,7 @@ export class SessionProviderBoundary {
 					telemetryConfig: this.#host.agent.telemetry,
 					sessionId: this.#host.sessionId(),
 					costGate: this.#host.costGate?.(),
+					usageLedger: this.#host.sessionManager,
 				},
 				signal,
 			);

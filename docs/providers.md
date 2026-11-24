@@ -4,7 +4,7 @@ Providers are the model backends `omp` can route requests to: Anthropic, OpenAI,
 
 A **provider** is the account or backend namespace, such as `anthropic`, `openai`, `google`, or `ollama`. A **model** is a concrete model under that provider, selected as `provider/model-id`, such as `anthropic/claude-opus-4-6`. Disabling a provider removes every model under it from selection; if you only want to narrow individual models, use model settings instead.
 
-This page covers how providers become available, how credentials are resolved, the provider/environment-variable map, local engines, disabling providers, and custom providers. For endpoint-specific request, reasoning, tool, stream, usage, and retry constraints, see [Provider endpoint constraints](./provider-endpoint-constraints.md). For model selection and the full `models.yml` schema, see [Model and Provider Configuration](./models.md). For config-file locations and merge precedence, see [Settings](./settings.md). For credential storage and login flows in depth, see [Secrets and credentials](./secrets.md). For the complete environment-variable reference, see [Environment variables](./environment-variables.md). For local engine setup, see [Local models](./local-models.md). For context-file discovery providers, see [Context files](./context-files.md).
+This page covers how providers become available, how credentials are resolved, the provider/environment-variable map, local engines, disabling providers, and custom providers. For native Kiro authentication, model discovery, and streaming, see [Kiro](./kiro.md). For endpoint-specific request, reasoning, tool, stream, usage, and retry constraints, see [Provider endpoint constraints](./provider-endpoint-constraints.md). For model selection and the full `models.yml` schema, see [Model and Provider Configuration](./models.md). For config-file locations and merge precedence, see [Settings](./settings.md). For credential storage and login flows in depth, see [Secrets and credentials](./secrets.md). For the complete environment-variable reference, see [Environment variables](./environment-variables.md). For local engine setup, see [Local models](./local-models.md). For context-file discovery providers, see [Context files](./context-files.md).
 
 ## Google Antigravity
 
@@ -15,6 +15,30 @@ The `antigravity` provider drives Google's **official** Antigravity agent throug
 3. Pick a model like any other provider (e.g. `gemini-3.7-flash-high`) and prompt. The agent runs its own file/terminal tools inside the session directory; they appear as ordinary tool cards in the transcript, but omp never executes them — the Antigravity runtime already did.
 
 omp never reads, proxies, or pools the Google tokens the binary stores, and offers no quota probing — usage comes only from what the agent reports during a turn. `OMP_ANTIGRAVITY_ACP_PATH` points omp at a user-managed `agy_acp_server` binary instead of the managed download.
+
+## Factory Droid
+
+The `factory-droid` provider uses Factory's Droid subscription gateway directly. No `droid` binary, daemon, or SDK subprocess is needed for login or inference.
+
+1. Run `omp login factory-droid` or `/login factory-droid` in an interactive session.
+2. Open the printed `auth.factory.ai/device` link in your browser, enter the displayed device code, and approve the login.
+3. Select a model, for example `factory-droid/kimi-k3`, and send a prompt. The stored WorkOS session refreshes automatically. `omp auth-broker login factory-droid` supports broker-backed credentials.
+
+Use subscription OAuth for this provider. It does not discover credentials from an installed Droid CLI or read `FACTORY_API_KEY`; Factory's separate API-key products are not part of this integration.
+
+The roster ships as KDL (`packages/catalog/src/compat/rules/providers/factory-droid.kdl`, with each model's wire and billing pool in `rules/runtime/behavior.kdl`), maintained by hand against the Droid CLI version pinned by `FACTORY_DROID_CLIENT_VERSION` (`packages/catalog/src/wire/factory-droid.ts`). It contains concrete CLI models, not the Factory Auto Model router or app-only Flex variants. Account feature flags, hard-deprecation gates, organization policy (including explicit opt-in requirements), and serving region narrow it live; new model IDs require a catalog update. Until discovery has succeeded online, feature-gated and consent-gated models stay hidden. Offline or failed discovery can retain a cached snapshot, which is not a guarantee of current entitlement.
+
+The roster includes Factory's `generate_image` models (`gpt-image-2.6-sunburst`, `gpt-image-2.6-flare`, `gpt-image-2.5-sunburst`, `gpt-image-2.5-flare`, `gemini-3-pro-image-preview`), which close the `image` role's defaults so a Factory login alone can generate images. They appear only after discovery reads the organization's managed settings: `imageGenerationEnabled: false` hides all of them, and `imageGenerationAllowedModelIds` narrows them (an empty list hides all). Image calls bill to the Standard Credits pool.
+
+Organization identity and residency travel with the credential serving each request, including account rotation, and each account/residency scope has its own model cache. Residency chooses the API host; the independent inference region (`global`, `us`, or `eu`) constrains upstream eligibility.
+
+Claude requests on Anthropic's own upstream offer Factory's server-side refusal fallback (Opus 5 for Fable and Opus 5.5) only when discovery found the fallback model in the account's roster. A request served by another organization's credential than discovery saw offers none; a Factory model OMP did not discover (one defined in `models.yml`) offers every fallback its rules name, as before discovery tracked them.
+
+`/usage` and `omp usage` report Standard Credits and Droid Core quota windows when the account uses token-rate-limit billing. Accounts whose billing response explicitly disables that mode remain visible with a note that no quota windows are exposed; OMP does not invent a remaining balance. The model browser shows each model's credit rate in force now, including Factory's dated credit promotions, and the model details name the next scheduled rate and its date; dollar figures are upstream list-price references, not Factory billing, and include no promotions. Models without a dollar reference display their credit rate rather than `free`. Extra balance alone does not establish that overage billing is enabled.
+
+If account rotation would narrow the selected model's context window, OMP stops before sending that retry rather than guessing whether the existing conversation fits. Refresh discovery with `omp models refresh factory-droid` and select the region-appropriate model before retrying.
+
+Factory's native context limits hold even when extended context is disabled. Factory GPT and Gemini routes omit output-token caps, so bounded ephemeral turns reject a `maxTokens` request instead of silently running uncapped.
 
 ## How `omp` decides a provider is available
 
@@ -141,6 +165,7 @@ The variables below supply credentials after runtime/config overrides and stored
 | `gmi-cloud`                      | `GMI_API_KEY`                                                                       |
 | `huggingface`                    | `HUGGINGFACE_HUB_TOKEN`, then `HF_TOKEN`                                            |
 | `inception`                      | `INCEPTION_API_KEY`                                                                 |
+| `kiro`                           | `KIRO_API_KEY` (`ksk_…`); `KIRO_API_REGION` pins its region                         |
 | `moonshot`                       | `MOONSHOT_API_KEY`, then `KIMI_API_KEY`                                             |
 | `stepfun`                        | `STEPFUN_API_KEY`                                                                   |
 | `helmcode`                       | `HELMCODE_API_KEY`                                                                  |
@@ -155,6 +180,8 @@ The variables below supply credentials after runtime/config overrides and stored
 | `nace`                           | `NACE_API_KEY`                                                                      |
 | `snowflake`                      | `SNOWFLAKE_PAT` + `SNOWFLAKE_ACCOUNT`                                               |
 | `litellm`                        | `LITELLM_API_KEY`; optional `LITELLM_BASE_URL` for the proxy endpoint               |
+| `bifrost`                        | `BIFROST_API_KEY`; optional `BIFROST_BASE_URL` for the gateway endpoint             |
+| `modal`                          | `MODAL_PROXY_TOKEN`; optional `MODAL_BASE_URL` for dedicated endpoints              |
 | `kilo`                           | `KILO_API_KEY`                                                                      |
 | `zai`                            | `ZAI_API_KEY`                                                                       |
 | `zenmux`                         | `ZENMUX_API_KEY`                                                                    |
@@ -200,7 +227,7 @@ For `xai-oauth`, `XAI_API_KEY` is accepted for an explicit request but does not 
 
 `cloudflare-workers-ai` serves Cloudflare's Clef decision models (`cloudflare-workers-ai/@cf/cloudflare/clef` and `cloudflare-workers-ai/@cf/cloudflare/clef-flash`) as `judge` models; assign one to the `judge` role to use it. `/login cloudflare-workers-ai` prompts for a Cloudflare API token with Workers AI Read and Edit permissions (create one at `https://dash.cloudflare.com/profile/api-tokens`) and your account ID, then stores both together. To use environment variables, set `CLOUDFLARE_API_TOKEN` (or `CLOUDFLARE_AUTH_TOKEN`) and `CLOUDFLARE_ACCOUNT_ID`.
 
-`liquid` serves Liquid AI's decision models (`liquid/d1.1` and `liquid/d1-ultra`) as `judge` models; assign one to the `judge` role to use it. `/login liquid` prompts for an API key from `https://console.liquid.ai/` (Dashboard > API Keys); to use an environment variable, set `LIQUID_API_KEY`. Images sent to Liquid are resized to fit its 10,000 patches of 32×32 pixels per request.
+`liquid` serves Liquid AI's decision models (`liquid/d1.2`, `liquid/d1.2-ultra`, and the deprecated `liquid/d1.1` and `liquid/d1-ultra`) as `judge` models; assign one to the `judge` role to use it. `/login liquid` prompts for an API key from `https://console.liquid.ai/` (Dashboard > API Keys); to use an environment variable, set `LIQUID_API_KEY`. Images sent to Liquid are resized to fit its 10,000 patches of 32×32 pixels per request.
 
 `nace` serves Nace's Drex decision models (`nace/drex-max-v1.1`, `nace/drex-max-finance` and the text-only `nace/drex-v2.0`) as `judge` models; assign one to the `judge` role to use it. `/login nace` prompts for an API key from `https://console.nace.ai/dashboard/api-keys`; to use an environment variable, set `NACE_API_KEY`. The Drex Max models take up to 8 PNG, JPEG, or WebP images per request. Drex rejects any text that holds a base64 image, audio, video, or PDF data URL, so OMP replaces each one in the state, instructions, and criteria with a description such as `[image/png base64 data URL]`.
 
@@ -219,6 +246,8 @@ SingularityAPI sells two unrelated products behind one brand, so OMP models them
 For Mistral, set `MISTRAL_API_KEY` to a key created on the Mistral console, or run `/login mistral` to sign in through the browser the way the Mistral Vibe CLI does. The browser sign-in mints a regular API key tied to your Mistral plan: its usage counts against the plan's Vibe Code quota instead of pay-as-you-go API credits. OMP stores it as a plain API key; there is nothing to refresh.
 
 OAuth-backed providers such as `anthropic`, `openai-codex`, `github-copilot`, `cursor`, `muse-code`, `ollama-cloud`, `qwen-portal`, `kimi-code`, `xai-oauth`, `wafer-serverless`, `google-gemini-cli`, `antigravity`, `devin`, and the GitLab providers (`gitlab-duo`, `gitlab-duo-agent`) are normally reached through `/login` rather than an environment variable. Interactive API-key logins exist too: `/login baseten`, `/login coreweave`, `/login sakana`, `/login singularityapi-dev`, and `/login singularityapi-tech` prompt for a dashboard/API key (`coreweave` additionally requires `COREWEAVE_PROJECT` for the `OpenAI-Project` header). See [Environment variables](./environment-variables.md) for search-tool and configuration variables not listed here.
+
+`/login kiro` signs in with AWS IAM Identity Center, a Builder ID, a `ksk_…` API key, or a Google or GitHub account. Google and GitHub use Kiro's device sign-in, which shows a link to `app.kiro.dev` and a one-time code, so it also works over SSH. See [Kiro](./kiro.md) for details.
 
 ### `.env` discovery and precedence
 

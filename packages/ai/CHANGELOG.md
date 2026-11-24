@@ -2,6 +2,169 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- GitHub Copilot Gemini models no longer fail every request with `400 invalid request body` when an MCP tool schema declares a `type` array (e.g. `["string", "null"]`); tool schemas are rewritten into Gemini's schema dialect ([#20198](https://github.com/can1357/oh-my-pi/issues/20198))
+- An openai-completions stream that gets HTTP 500 back sends six requests, not twelve: the provider-error replay no longer re-runs a status the transport already retried ([#19729](https://github.com/can1357/oh-my-pi/issues/19729), [#20215](https://github.com/can1357/oh-my-pi/pull/20215) by [@JamieJ5926](https://github.com/JamieJ5926))
+- Fixed `omp usage` showing no data for Synthetic’s weekly-only plans; it now shows weekly credit usage and the next regeneration tick ([#20251](https://github.com/can1357/oh-my-pi/pull/20251) by [@dagurval](https://github.com/dagurval))
+
+## [19.1.1] - 2026-11-23
+
+### Added
+
+- Added `AssistantMessage.requestId`, populated from Anthropic’s `request-id` response header, so failed or refused requests retain the identifier needed for Anthropic support.
+- Added `GET /v1/pi/models` to `omp auth-gateway`, serving the gateway's model catalog (limits, thinking levels, pricing) to pi-native clients.
+
+### Changed
+
+- Devin account selection now prioritizes logins with remaining daily or weekly quota, then accounts funded by on-demand balance, while skipping accounts with no available capacity. Devin logins also track email, user ID, and organization so separate organizations are distinguishable in `omp usage` and `auth.accountPolicies`; existing logins must be reauthenticated to populate this information.
+- Billing failures from providers are now treated as usage limits, allowing retries to rotate accounts and continue through the model fallback chain.
+- Provider usage reports registered by extensions now persist across omp processes, avoiding unnecessary repeated usage-endpoint checks.
+- Requests that stall during provider operations are now classified as timeouts, allowing automatic fallback to another model.
+- Reduced idle memory usage by loading prompt-perturbation data only when perturbation is enabled for a request.
+
+### Fixed
+
+- Fixed split tool-call handling so models configured with `splitToolCalls` receive each tool call together with its corresponding result in the correct message order.
+- Fixed `apple/on-device` finish-reason handling so requests no longer emit spurious stderr warnings and correctly report recognized stop or length completions.
+- Improved local validation for empty Anthropic requests by reporting the model, provider, and received message count instead of an opaque provider error.
+- Fixed OpenAI and Codex requests failing on MCP tool schemas containing unsupported unescaped character patterns.
+- OpenRouter Responses requests that end in an unbilled encrypted reasoning item now surface the underlying provider failure instead of completing silently.
+- Fixed preservation of Gemini thought signatures across tool calls when using Portkey or the authentication gateway.
+- Fixed the thinking-loop guard incorrectly retrying final answers containing long Markdown tables or similarly shaped JSON records.
+- Fixed strict tool-schema conversion so object properties that accept arbitrary fields are not incorrectly restricted to empty objects.
+- Fixed `antigravity-cli` models failing to receive images returned by tools such as `read`.
+- Fixed transient proxy errors from disrupting snapshot streaming and disabling usage reporting for the remainder of the process.
+- Fixed concurrent Antigravity CLI sessions for the same account failing during credential staging.
+- Fixed OpenAI Codex WebSocket continuations so sticky turn routing information is preserved for subsequent requests.
+- Improved recovery from a corrupt `agent.db` so readable provider credentials are restored where possible and disabled credentials remain disabled.
+
+## [19.1.0] - 2026-11-21
+
+### Added
+
+- Added provider hooks (`setProviderHooks` in `@oh-my-pi/pi-ai/provider-hooks`), which replace a provider's stream adapter or image generation while its models keep their api.
+- Added opt-in prompt perturbation: model-visible prompt prose and tool descriptions use a per-install wording chosen from a committed paraphrase pool covering every static system- and tool-prompt line. Models enable it with the `prompt-perturbation` KDL axis; `OMP_PROMPT_PERTURBATION=1`/`0` forces it on or off.
+
+### Changed
+
+- The Cursor provider forwards `bash` instead of `write` so staged previews can be finalized
+- Increased provider stream watchdog defaults from 5 to 15 minutes, preventing slow one-shot completions from being interrupted prematurely.
+- Extended Gemini reasoning-stream protection to allow longer planning sequences before interruption.
+
+### Fixed
+
+- Broker-backed credential stores now detect a login the broker stores but does not serve and keep it in the local `agent.db` (`HybridAuthCredentialStore`) instead of losing it on the next snapshot; a broker-only `RemoteAuthCredentialStore` fails the upload with `AuthBrokerUnservedProviderError`.
+- OpenAI Codex requests no longer send the `session_id` and `conversation_id` headers; the session goes out only as `session-id`, like the Codex CLI, so proxies that reject underscore header names (Envoy, nginx defaults) pass them ([#20018](https://github.com/can1357/oh-my-pi/issues/20018))
+- Preserved the intended conversation structure when a user message follows a tool result for models that fold user messages after tool results.
+- LiteLLM requests now rotate to another configured API key when a 422 budget-exceeded response disables the current key. ([#19860](https://github.com/can1357/oh-my-pi/issues/19860))
+- GPT-6.2 system prompts are now sent as leading developer messages through third-party Responses proxies, enabling prompt caching and avoiding unnecessary full-rate input charges on subsequent turns. ([openai/codex#62312](https://github.com/openai/codex/issues/62312))
+- Improved thinking-mode detection across request formats, avoiding unnecessary retries and correctly remembering formats accepted or rejected by the server. ([#19758](https://github.com/can1357/oh-my-pi/pull/19758) by [@eggpeat](https://github.com/eggpeat))
+- Auth refresh failures that could cause an access token to expire before the next retry are now surfaced with a warning instead of remaining visible only in debug logs. ([#19590](https://github.com/can1357/oh-my-pi/pull/19590) by [@will-bogusz](https://github.com/will-bogusz))
+- Chat Completions now preserve reasoning returned only in `reasoning_details`, including reasoning from Bifrost Gemini. ([#19595](https://github.com/can1357/oh-my-pi/pull/19595) by [@Xytronix](https://github.com/Xytronix))
+- Antigravity quota exhaustion is now reported as a 429 rate-limit error, allowing configured retries, credential rotation, and model fallback behavior to apply correctly instead of treating the response as assistant text. ([#19382](https://github.com/can1357/oh-my-pi/pull/19382) by [@gimso2x](https://github.com/gimso2x))
+- Anthropic requests now preserve prompt caching when tools are activated later in a conversation, avoiding unnecessary system-prompt and transcript cache rewrites. ([#19826](https://github.com/can1357/oh-my-pi/issues/19826))
+
+## [19.0.1] - 2026-11-19
+
+### Fixed
+
+- Fixed GIF images failing Liquid AI judgments with HTTP 422; they are now sent as PNG ([#19757](https://github.com/can1357/oh-my-pi/pull/19757) by [@alphastorm](https://github.com/alphastorm))
+- Anthropic strict-tool fallback now treats a Vertex org-policy rejection of `structured_outputs` (`allowedPartnerModelFeatures` / "disallowed feature structured_outputs") as a strict-tools rejection, retries once without `strict`, and pins `strictToolsDisabled` ([#19576](https://github.com/can1357/oh-my-pi/issues/19576)) ([#19655](https://github.com/can1357/oh-my-pi/pull/19655) by [@koeria](https://github.com/koeria))
+- Kiro requests rejected with `Input is too long.` or `CONTENT_LENGTH_EXCEEDS_THRESHOLD` can now recover through conversation compaction ([#19723](https://github.com/can1357/oh-my-pi/pull/19723) by [@emotionbug](https://github.com/emotionbug))
+- Kiro thinking off now turns reasoning off instead of running the model's default effort; models that cannot disable reasoning use their lowest effort ([#19722](https://github.com/can1357/oh-my-pi/pull/19722) by [@emotionbug](https://github.com/emotionbug))
+- Kiro `/usage` shows purchased add-on credits, and an account whose plan credits are spent keeps serving while add-on credits remain ([#19724](https://github.com/can1357/oh-my-pi/pull/19724) by [@emotionbug](https://github.com/emotionbug))
+- Kiro Identity Center logins in AWS GovCloud (US) now list profiles in `us-gov-west-1` and `us-gov-east-1` instead of the commercial regions, which reject GovCloud tokens ([#19726](https://github.com/can1357/oh-my-pi/pull/19726) by [@TechDufus](https://github.com/TechDufus))
+- Statusless gateway errors reading `stream interrupted` now retry like `stream was interrupted` instead of ending the turn ([#19709](https://github.com/can1357/oh-my-pi/issues/19709)).
+
+## [19.0.0] - 2026-11-18
+
+### Added
+
+- Added a `prewarm` stream option for Anthropic Messages requests to refresh prompt caches without generating billable output; it is rejected for budget thinking, forced tool choice, and structured output.
+- Claude usage reports now include the account subscription plan in `metadata.subscriptionPlan`, supporting Max 5x, Max 20x, Pro, Team, and Enterprise plans.
+- Added `retryUnreachableBroker` and `onBrokerRetry` options to `discoverAuthStorage`, allowing hosts to control startup retries for temporarily unavailable authentication brokers and display retry status.
+
+### Fixed
+
+- Fixed Claude account failover after a shared weekly usage limit recovers, ensuring accounts become available again when usage reporting no longer shows that window.
+- Authentication broker startup now tolerates temporary broker restarts and connection interruptions by retrying for up to 30 seconds, while still failing immediately for rejected tokens or malformed snapshots.
+- Improved authentication broker compatibility across client and broker versions by tolerating unknown credential, usage, and observed-usage fields and values.
+- Fixed Codex Spark usage meters so reports that identify the meter only by `metered_feature` remain correctly scoped to the Spark model.
+- Fixed Antigravity CLI requests for models whose available IDs include effort suffixes, such as resolving `gemini-4-hydrogen` when only `gemini-4-hydrogen-high` is offered.
+
+## [18.22.2] - 2026-11-18
+
+### Added
+
+- Added the native Kiro provider: sign in with AWS IAM Identity Center, AWS Builder ID, Google, GitHub, or a Kiro API key (`KIRO_API_KEY`), stream responses with reasoning, tool calls, and images, and report Kiro credits in `/usage` ([#18955](https://github.com/can1357/oh-my-pi/pull/18955) by [@Xytronix](https://github.com/Xytronix), based on [#14215](https://github.com/can1357/oh-my-pi/pull/14215) by [@ajdiyassin](https://github.com/ajdiyassin))
+- Added a `definitive` option to `OAuthError`; `isDefinitiveOAuthFailure` now takes the error object and disables a credential marked definitive without matching its message ([#18955](https://github.com/can1357/oh-my-pi/pull/18955) by [@Xytronix](https://github.com/Xytronix))
+- `buildAnthropicSearchHeaders` takes `extraBetas`, request-specific betas sent beside the web search beta ([#18125](https://github.com/can1357/oh-my-pi/pull/18125) by [@will-bogusz](https://github.com/will-bogusz))
+- Added `omitDemotedReasoning` to `StreamOptions`: an Anthropic request leaves out other models' reasoning that it would otherwise replay as text, and a refused request reports how many such blocks it carried in `demotedReasoningBlocks` ([#10407](https://github.com/can1357/oh-my-pi/issues/10407)) ([#17610](https://github.com/can1357/oh-my-pi/pull/17610) by [@will-bogusz](https://github.com/will-bogusz))
+
+### Fixed
+
+- Fixed shutting down or cancelling an omp session making every other session sharing the agent directory see its OAuth accounts as depleted for 5 minutes; still-valid tokens are also served during shutdown ([#19607](https://github.com/can1357/oh-my-pi/issues/19607))
+- OAuth accounts refreshed through an auth broker keep their stored routing metadata (such as an API endpoint) in the key built for the request, instead of losing it after the first refresh ([#18955](https://github.com/can1357/oh-my-pi/pull/18955) by [@Xytronix](https://github.com/Xytronix), based on [#14215](https://github.com/can1357/oh-my-pi/pull/14215) by [@ajdiyassin](https://github.com/ajdiyassin))
+- Fenced (```thinking) reasoning with very long unbroken lines no longer slows down as it streams ([#19493](https://github.com/can1357/oh-my-pi/pull/19493) by [@H4vC](https://github.com/H4vC))
+- Fixed Anthropic requests that replay a signed server-compaction block still asking for a message thread, which the API refuses (`thread_unsupported_request`), so every such request first paid a rejected round trip before resending without the thread ([#19473](https://github.com/can1357/oh-my-pi/pull/19473) by [@alphastorm](https://github.com/alphastorm))
+- Anthropic requests whose connection drops before any response now say how long after the request started it dropped and whether the request body was still uploading or had all been written to the socket, with its size, instead of a bare "Connection error." ([#18624](https://github.com/can1357/oh-my-pi/pull/18624) by [@will-bogusz](https://github.com/will-bogusz))
+- Fixed Anthropic requests dropping the reasoning of earlier non-Claude turns signed in under another credential, or kept through a compaction; it is now replayed like other models' reasoning ([#7241](https://github.com/can1357/oh-my-pi/issues/7241)) ([#17610](https://github.com/can1357/oh-my-pi/pull/17610) by [@will-bogusz](https://github.com/will-bogusz))
+
+## [18.22.1] - 2026-11-17
+
+### Added
+
+- Added support for request-specific Anthropic beta headers through the `extraBetas` option in `buildAnthropicSearchHeaders`.
+- Added `omitDemotedReasoning` to `StreamOptions`, allowing Anthropic requests to omit other models' reasoning that would otherwise be replayed as text; refused requests report the omitted block count in `demotedReasoningBlocks`.
+- Usage reports can now include the credential ID used by API-key or OAuth credentials, and `AuthStorage.sessions.sticky` provides a read-only lookup for the credential serving a session.
+- Added `riskAcknowledgement` to `OAuthPrompt`, allowing hosts to display login-warning acceptance text even when they decline input before the authorization URL is shown.
+- `remoteCompaction: { api: "anthropic-messages", enabled: true }` opts an Anthropic model at a gateway `baseUrl` outside the known deployments into on-demand compaction; `enabled` alone keeps such a gateway excluded, and a reroute away from the configured endpoint still has to reach a known deployment. `isBuiltinApi()` tells a built-in request adapter from an extension's custom api ([#19580](https://github.com/can1357/oh-my-pi/pull/19580) by [@ryanskidmore](https://github.com/ryanskidmore))
+
+### Changed
+
+- OpenAI Codex requests now track the latest compatible `@openai/codex` client version automatically, with an optional `PI_AI_CODEX_CLIENT_VERSION` override, so newly available Codex models can be used without updating omp.
+- Updated OpenAI Codex request formatting and ChatGPT token-refresh reporting to match Codex CLI 0.169.
+- Updated Claude Code and Gemini CLI client version identifiers to 2.1.326 and 0.68.0, respectively.
+
+### Fixed
+
+- Fixed OpenAI Decisions usage accounting for gateways that report `prompt_tokens` and `completion_tokens` instead of `input_tokens` and `output_tokens`.
+- Improved streaming performance for fenced thinking content containing very long unbroken lines.
+- Fixed Anthropic requests replaying signed server-compaction blocks with unsupported thread metadata, avoiding a rejected request before retrying.
+- Improved diagnostics for Anthropic connections that drop before a response by reporting elapsed time, upload state, and request size.
+- Fixed Anthropic conversations losing reasoning from earlier non-Claude turns or turns retained through compaction.
+- Fixed credential rotation and retry timing for custom providers using the Zhipu Coding Plan endpoint so Beijing-time quota resets are honored.
+- Fixed Claude Fable and Mythos usage-limit errors so rotation selects a sibling account with available quota when possible.
+- Invalid Antigravity CLI tool arguments now return validation errors and the expected schema to the model instead of ending the turn.
+- Abandoned Antigravity CLI login directories without credentials are automatically cleaned up after 24 hours.
+- Improved reliability of managed Antigravity CLI downloads on slow connections and provided more useful progress and timeout errors.
+- Fixed Antigravity CLI host tools with mixed-type union schemas being published incorrectly, allowing subagents to submit results.
+- Fixed Codex assistant messages in the `partial_answer` phase losing their phase when stored and replayed.
+
+## [18.22.0] - 2026-11-16
+
+### Fixed
+
+- Fixed slow streaming of Gemma tool calls with large arguments.
+
+## [18.21.0] - 2026-11-16
+
+### Added
+
+- Added automatic detection of thinking capabilities for previously unknown models, with persistent results and support for alternate effort and token-budget request formats.
+
+## [18.20.3] - 2026-11-16
+
+### Breaking Changes
+
+- Removed the public `isXdDevicePath` export from `providers/cursor-pi-args`. Ranged reads of `xd://` documents now use the standard line-selector behavior.
+
+### Fixed
+
+- Fixed rate-limit handling for Mistral and other OpenAI-compatible providers so requests with no available allowance fail immediately with an actionable error suggesting a model or plan change.
+- Fixed Anthropic OAuth requests for pooled Claude accounts to report accurate device and account information, including after credentials are rotated during a request.
+
 ## [18.20.2] - 2026-11-14
 
 ### Added
@@ -2535,3 +2698,4 @@ Older entries are archived in [packages/ai/CHANGELOG.md@bdbb5c920f69](https://gi
 
 Older entries are archived in [packages/ai/CHANGELOG.md@cef4a452836c](https://github.com/can1357/oh-my-pi/blob/cef4a452836c7a8d547dd14470c34c9ed2dbb5f8/packages/ai/CHANGELOG.md).
 Older entries are archived in [packages/ai/CHANGELOG.md@80ad1d6b2eb3](https://github.com/can1357/oh-my-pi/blob/80ad1d6b2eb3dd916d863841dcae79f4f96c5612/packages/ai/CHANGELOG.md).
+Older entries are archived in [packages/ai/CHANGELOG.md@02eb912b7688](https://github.com/can1357/oh-my-pi/blob/02eb912b76887f1a06bc65e2352ef96742ec1067/packages/ai/CHANGELOG.md).

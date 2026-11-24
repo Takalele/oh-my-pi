@@ -242,6 +242,14 @@ export interface SessionStorage {
 	 */
 	claimSession?(sessionId: string, sessionPath: string): (() => void) | null;
 	/**
+	 * Whether another live process holds the claim (see `claimSession`) on the
+	 * session journaled at `sessionPath`, observed without taking it, so the
+	 * probe never makes the owner's own claim fail. `SessionManager.continueRecent`
+	 * starts a new session instead of resuming one a running process writes.
+	 * Optional for the same reason as `claimSession`.
+	 */
+	isSessionOwnedElsewhere?(sessionPath: string): boolean;
+	/**
 	 * Atomically delete a session and its artifacts only when `shouldDelete`
 	 * accepts the current session content. Optional because backends without a
 	 * cross-process conditional-delete primitive must skip opportunistic GC.
@@ -602,16 +610,24 @@ function sessionLeasePath(sessionId: string, createDir: boolean): string {
 		? sessionId
 		: `h-${Bun.hash.wyhash(sessionId).toString(16).padStart(16, "0")}`;
 	const dir = sessionOwnersDir();
-	// Linux (abstract socket) and Windows (named mutex) locks never touch the
-	// filesystem; elsewhere the lock is a `flock` sidecar in that directory. The
-	// sidecars are empty and never removed: unlinking a flock file can split one
-	// lease between a holder of the old inode and a creator of a new one.
-	if (process.platform !== "linux" && process.platform !== "win32") {
+	// Windows (named mutex) locks never touch the filesystem; elsewhere the lock
+	// is a sidecar in that directory. The sidecars are empty and never removed:
+	// unlinking a lock file can split one lease between a holder of the old inode
+	// and a creator of a new one.
+	if (process.platform !== "win32") {
 		if (createDir) fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
 		// The test-run dir sits in the shared OS temp dir, where another local
 		// user could pre-create it or plant a symlink: refuse anything but a
-		// directory this user owns that nobody else can enter.
-		const st = fs.lstatSync(dir);
+		// directory this user owns that nobody else can enter. A probe of a
+		// directory nobody created yet still goes to the lock, which on Linux
+		// also sees a lease an older build holds as an abstract socket.
+		let st: fs.Stats;
+		try {
+			st = fs.lstatSync(dir);
+		} catch (err) {
+			if (!createDir && isEnoent(err)) return path.join(dir, name);
+			throw err;
+		}
 		const uid = process.getuid?.();
 		if (!st.isDirectory() || (uid !== undefined && st.uid !== uid) || (st.mode & 0o077) !== 0) {
 			throw new Error(`Session ownership lease directory ${dir} is not a private directory owned by this user`);
@@ -640,9 +656,8 @@ export function tryAcquireSessionLease(sessionId: string): FileLockHandle | null
 export function isSessionLeaseHeld(sessionId: string): boolean | null {
 	try {
 		return isFileLockHeld(sessionLeasePath(sessionId, false));
-	} catch (err) {
-		// No sidecar directory yet: nobody has ever claimed a session here.
-		return isEnoent(err) ? false : null;
+	} catch {
+		return null;
 	}
 }
 
@@ -1329,8 +1344,9 @@ export class FileSessionStorage implements SessionStorage {
 	}
 
 	/**
-	 * The lease is an OS lock (abstract socket, named mutex, or `flock` sidecar
-	 * under ~/.omp/run/session-owners), so the kernel drops a dead owner's claim.
+	 * The lease is an OS lock (named mutex on Windows, otherwise an OFD or
+	 * `flock` lock on a sidecar under ~/.omp/run/session-owners), so the kernel
+	 * drops a dead owner's claim.
 	 * Never throws: a lock that cannot be taken for another reason counts as
 	 * owned, so it never moves a session off its file.
 	 */
@@ -1360,6 +1376,13 @@ export class FileSessionStorage implements SessionStorage {
 			sessionLeases.delete(sessionId);
 			claim.lease.release();
 		};
+	}
+
+	/** A session this process holds, or whose lease cannot be probed, is not owned elsewhere. */
+	isSessionOwnedElsewhere(sessionPath: string): boolean {
+		const sessionId = readSessionHeaderIdSync(sessionPath);
+		if (sessionId === undefined || sessionLeases.has(sessionId)) return false;
+		return isSessionLeaseHeld(sessionId) === true;
 	}
 
 	/**
@@ -1395,13 +1418,23 @@ export class FileSessionStorage implements SessionStorage {
 		sessionPath: string,
 		options?: { historyDbPath?: string; statsDbPath?: string },
 	): Promise<void> {
-		// Purge history/stats rows before the transcript is gone: the purge
-		// reads the session id from the live header (#18674). Best-effort, so
-		// a busy dashboard store never fails the delete itself.
-		purgeDeletedSessionRows(sessionPath, options);
-
-		// Delete the session file itself
-		await this.unlink(sessionPath);
+		// Read the id while the transcript is still here. Rows are purged only
+		// once that transcript is gone, so a failed unlink does not drop
+		// history/stats for a session that is still on disk. A transcript that
+		// is already absent still purges (callers treat ENOENT as success) and
+		// then rethrows, so artifact cleanup does not run for a file this call
+		// did not remove.
+		const sessionId = readSessionHeaderIdSync(sessionPath);
+		let alreadyGone: unknown;
+		try {
+			await this.unlink(sessionPath);
+		} catch (err) {
+			if (!isEnoent(err)) throw err;
+			alreadyGone = err;
+		}
+		// Best-effort: a busy dashboard store never fails the delete itself.
+		purgeDeletedSessionRows(sessionPath, { ...options, sessionId });
+		if (alreadyGone) throw alreadyGone;
 
 		// Compute artifacts directory: /path/to/session.jsonl -> /path/to/session
 		const artifactsDir = sessionPath.slice(0, -6);

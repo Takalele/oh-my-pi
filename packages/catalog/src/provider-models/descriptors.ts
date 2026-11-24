@@ -24,6 +24,7 @@ import {
 	anthropicModelManagerOptions,
 	basetenModelManagerOptions,
 	bedrockMantleModelManagerOptions,
+	bifrostModelManagerOptions,
 	cerebrasModelManagerOptions,
 	charmHyperModelManagerOptions,
 	chutesModelManagerOptions,
@@ -49,6 +50,7 @@ import {
 	metaModelManagerOptions,
 	museCodeModelManagerOptions,
 	mistralModelManagerOptions,
+	modalModelManagerOptions,
 	moonshotModelManagerOptions,
 	nanoGptModelManagerOptions,
 	novitaModelManagerOptions,
@@ -80,6 +82,7 @@ import {
 	xaiOAuthModelManagerOptions,
 	xiaomiModelManagerOptions,
 	yoloAutoModelManagerOptions,
+	zaiModelManagerOptions,
 	zenmuxModelManagerOptions,
 	zhipuCodingPlanModelManagerOptions,
 } from "./openai-compat";
@@ -95,7 +98,6 @@ import {
 	naceModelManagerOptions,
 	typesafeModelManagerOptions,
 	webModelManagerOptions,
-	zaiModelManagerOptions,
 } from "./special";
 
 export type { KnownProvider } from "../compat/provider-ids";
@@ -111,6 +113,7 @@ const MODEL_MANAGER_FACTORIES: Readonly<Partial<Record<KnownProvider, ModelManag
 	antigravity: config => antigravityAcpModelManagerOptions(config),
 	baseten: config => basetenModelManagerOptions(config),
 	"bedrock-mantle": config => bedrockMantleModelManagerOptions(config),
+	bifrost: config => bifrostModelManagerOptions(config),
 	anthropic: config => anthropicModelManagerOptions(config),
 	cerebras: config => cerebrasModelManagerOptions(config),
 	"charm-hyper": config => charmHyperModelManagerOptions(config),
@@ -143,6 +146,7 @@ const MODEL_MANAGER_FACTORIES: Readonly<Partial<Record<KnownProvider, ModelManag
 	local: () => localModelManagerOptions(),
 	"lm-studio": config => lmStudioModelManagerOptions(config),
 	mistral: config => mistralModelManagerOptions(config),
+	modal: config => modalModelManagerOptions(config),
 	"muse-code": config => museCodeModelManagerOptions(config),
 	meta: config => metaModelManagerOptions(config),
 	moonshot: config => moonshotModelManagerOptions(config),

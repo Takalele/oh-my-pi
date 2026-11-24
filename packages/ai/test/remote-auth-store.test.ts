@@ -371,8 +371,13 @@ describe("RemoteAuthCredentialStore + AuthStorage integration", () => {
 			initialSnapshot: initial.snapshot,
 			streamSnapshots: false,
 		});
+		// Reports probed from a stored row carry that row's id (#19492).
+		const codexId = serverStore!.listAuthCredentials("openai-codex")[0]!.id;
 		try {
-			expect(await remote.getUsageReport("anthropic", credential)).toEqual(anthropicReport);
+			expect(await remote.getUsageReport("anthropic", credential)).toEqual({
+				...anthropicReport,
+				metadata: { ...anthropicReport.metadata, credentialId: entry.id },
+			});
 			expect(fastFetch).toHaveBeenCalledTimes(1);
 			expect(slowFetch).not.toHaveBeenCalled();
 
@@ -382,9 +387,10 @@ describe("RemoteAuthCredentialStore + AuthStorage integration", () => {
 			expect((await aggregate)?.map(report => report.provider).sort()).toEqual(["anthropic", "openai-codex"]);
 			expect(fastFetch).toHaveBeenCalledTimes(1);
 			expect(slowFetch).toHaveBeenCalledTimes(1);
-			expect(await remote.getUsageReport("openai-codex", { ...credential, accountId: "codex-account" })).toEqual(
-				codexReport,
-			);
+			expect(await remote.getUsageReport("openai-codex", { ...credential, accountId: "codex-account" })).toEqual({
+				...codexReport,
+				metadata: { ...codexReport.metadata, credentialId: codexId },
+			});
 		} finally {
 			releaseSlow.resolve();
 			remote.close();
@@ -957,7 +963,7 @@ describe("RemoteAuthCredentialStore + AuthStorage integration", () => {
 
 	test("hands a provider's lone usage report only to a credential its identity cannot contradict", async () => {
 		// Bob's fetch succeeded and Alice's failed, so the aggregate holds one
-		// Cloud Code Assist report. The shared project must not give Alice Bob's
+		// Antigravity report. The shared project must not give Alice Bob's
 		// exhausted pool, and her header overlay must not land on his row.
 		const brokerClient = new AuthBrokerClient({ url: "http://127.0.0.1:9", token: "unused" });
 		const now = Date.now();
@@ -984,14 +990,14 @@ describe("RemoteAuthCredentialStore + AuthStorage integration", () => {
 			limits: [],
 			metadata: { email: "carol@example.com" },
 		};
-		const googleReport: UsageReport = {
-			provider: "google",
+		const geminiReport: UsageReport = {
+			provider: "zai",
 			fetchedAt: now,
 			limits: [
 				{
-					id: "google:pro",
+					id: "zai:pro",
 					label: "Pro",
-					scope: { provider: "google", accountId: " account-dave " },
+					scope: { provider: "zai", accountId: " account-dave " },
 					amount: { usedFraction: 0.2, unit: "percent" },
 				},
 			],
@@ -999,7 +1005,7 @@ describe("RemoteAuthCredentialStore + AuthStorage integration", () => {
 		};
 		vi.spyOn(brokerClient, "fetchUsage").mockResolvedValue({
 			generatedAt: now,
-			reports: [bobReport, cursorReport, googleReport],
+			reports: [bobReport, cursorReport, geminiReport],
 		});
 		const remoteStore = new RemoteAuthCredentialStore({
 			client: brokerClient,
@@ -1033,8 +1039,8 @@ describe("RemoteAuthCredentialStore + AuthStorage integration", () => {
 				{ email: "dave@example.com" },
 				{ email: "dave@example.com", accountId: " account-dave " },
 			]) {
-				const google = await remoteStore.getUsageReport("google", credential(dave));
-				expect(google?.metadata?.currentTierId).toBe("standard-tier");
+				const gemini = await remoteStore.getUsageReport("zai", credential(dave));
+				expect(gemini?.metadata?.currentTierId).toBe("standard-tier");
 			}
 
 			const aliceOverlay: UsageReport = {
@@ -1044,11 +1050,11 @@ describe("RemoteAuthCredentialStore + AuthStorage integration", () => {
 				metadata: { email: "alice@example.com", projectId },
 			};
 			expect(remoteStore.ingestUsageReport("google-gemini-cli", alice, aliceOverlay)).toBe(true);
-			const cliRows = (await remoteStore.fetchUsageReports())
+			const antigravityRows = (await remoteStore.fetchUsageReports())
 				?.filter(report => report.provider === "google-gemini-cli")
 				.map(report => [report.metadata?.email, requireLimit(report, "google-gemini-cli:weekly").status])
 				.toSorted();
-			expect(cliRows).toEqual([
+			expect(antigravityRows).toEqual([
 				["alice@example.com", "ok"],
 				["bob@example.com", "exhausted"],
 			]);
