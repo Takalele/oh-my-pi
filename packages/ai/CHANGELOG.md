@@ -11,16 +11,20 @@
 - GitHub Copilot Gemini models no longer fail every request with `400 invalid request body` when an MCP tool schema declares a `type` array (e.g. `["string", "null"]`); tool schemas are rewritten into Gemini's schema dialect ([#20198](https://github.com/can1357/oh-my-pi/issues/20198))
 - An openai-completions stream that gets HTTP 500 back sends six requests, not twelve: the provider-error replay no longer re-runs a status the transport already retried ([#19729](https://github.com/can1357/oh-my-pi/issues/19729), [#20215](https://github.com/can1357/oh-my-pi/pull/20215) by [@JamieJ5926](https://github.com/JamieJ5926))
 - Fixed `omp usage` showing no data for Synthetic’s weekly-only plans; it now shows weekly credit usage and the next regeneration tick ([#20251](https://github.com/can1357/oh-my-pi/pull/20251) by [@dagurval](https://github.com/dagurval))
+## [19.2.1] - 2026-11-25
+
 ### Added
 
-- Requests that ask for a fast service tier now prefer a credential that offers it: Codex accounts whose plan advertises the tier (Ultrafast), Claude accounts with fast mode available, or a stored or environment API key. Such an account keeps serving on paid overage and inside its reserve, and ordinary balancing across the rest takes over once it is blocked or refused the tier.
+- Fast-tier requests now prefer eligible credentials, including Codex plans with Ultrafast, Claude accounts with fast mode, and stored or environment API keys. Eligible accounts continue serving on paid overage and within their reserve, while normal load balancing resumes when the requested tier is unavailable or refused.
+
+### Changed
+
+- Embeddings, transcription, and video errors now present upstream error messages clearly when available instead of exposing raw JSON response bodies.
 
 ### Fixed
 
-- Codex requests no longer send a service tier to an account whose own plan does not offer it.
-### Fixed
-
-- Successful OAuth refreshes now clear refresh-failure backoff so healthy accounts stop triggering usage-aware fallback after an outage ([#20454](https://github.com/can1357/oh-my-pi/issues/20454)).
+- Fixed Codex requests incorrectly sending a service tier to accounts whose plans do not support it.
+- Successful OAuth token refreshes now restore normal account selection after a temporary refresh outage.
 
 ## [19.2.0] - 2026-11-25
 

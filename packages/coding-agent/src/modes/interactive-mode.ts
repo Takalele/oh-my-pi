@@ -2853,6 +2853,7 @@ export class InteractiveMode implements InteractiveModeContext {
 				timeoutMs: cfgLoopConditionTimeoutMs.get(settings),
 				signal: controller.signal,
 				sessionId,
+				sessionFile: this.sessionManager.getSessionFile(),
 				isSessionCurrent: () => this.sessionManager.getSessionId() === sessionId,
 			});
 		} finally {
@@ -7200,10 +7201,6 @@ export class InteractiveMode implements InteractiveModeContext {
 	// Extension UI integration
 	setToolUIContext(uiContext: ExtensionUIContext, hasUI: boolean): void {
 		this.#toolUiContextSetter(uiContext, hasUI);
-	}
-
-	initializeHookRunner(uiContext: ExtensionUIContext, hasUI: boolean): void {
-		this.#extensionUiController.initializeHookRunner(uiContext, hasUI);
 	}
 
 	// UI helpers
