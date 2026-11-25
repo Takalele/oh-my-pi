@@ -11,6 +11,50 @@
 - GitHub Copilot Gemini models no longer fail every request with `400 invalid request body` when an MCP tool schema declares a `type` array (e.g. `["string", "null"]`); tool schemas are rewritten into Gemini's schema dialect ([#20198](https://github.com/can1357/oh-my-pi/issues/20198))
 - An openai-completions stream that gets HTTP 500 back sends six requests, not twelve: the provider-error replay no longer re-runs a status the transport already retried ([#19729](https://github.com/can1357/oh-my-pi/issues/19729), [#20215](https://github.com/can1357/oh-my-pi/pull/20215) by [@JamieJ5926](https://github.com/JamieJ5926))
 - Fixed `omp usage` showing no data for Synthetic’s weekly-only plans; it now shows weekly credit usage and the next regeneration tick ([#20251](https://github.com/can1357/oh-my-pi/pull/20251) by [@dagurval](https://github.com/dagurval))
+### Added
+
+- Requests that ask for a fast service tier now prefer a credential that offers it: Codex accounts whose plan advertises the tier (Ultrafast), Claude accounts with fast mode available, or a stored or environment API key. Such an account keeps serving on paid overage and inside its reserve, and ordinary balancing across the rest takes over once it is blocked or refused the tier.
+
+### Fixed
+
+- Codex requests no longer send a service tier to an account whose own plan does not offer it.
+### Fixed
+
+- Successful OAuth refreshes now clear refresh-failure backoff so healthy accounts stop triggering usage-aware fallback after an outage ([#20454](https://github.com/can1357/oh-my-pi/issues/20454)).
+
+## [19.2.0] - 2026-11-25
+
+### Breaking Changes
+
+- maxInFlightRequests limits are now scoped per process unless the host configures a ProviderSlotBroker; the previous cross-process lease-directory mechanism has been removed.
+
+### Added
+
+- Added ProviderSlotBroker support through configureProviderSlotBroker(broker), allowing hosts such as coding-agent to coordinate maxInFlightRequests limits across processes.
+- Added AssistantMessage.errorFromAgentLoop to distinguish errors caused by the agent loop from errors returned by the provider.
+- OpenAI- and Anthropic-compatible requests to custom hosts now include an x-session-id header when the host does not provide its own session header, preserving conversation affinity through gateways and proxies. Official OpenAI, Anthropic, and Codex APIs are unchanged.
+- Added an "Anthropic (Claude Pro/Max, 1-year token)" login that lasts a year instead of 30 days and never refreshes; image uploads to Anthropic's Files API stay with the regular login.
+- Added regional and custom endpoint selection to /login otari, storing non-US endpoints with the account so EU and self-hosted deployments do not need OTARI_BASE_URL configured separately.
+
+### Changed
+
+- Requests waiting for maxInFlightRequests capacity now begin immediately when capacity is released, rather than relying on periodic polling.
+- omp auth-gateway now preserves Codex session and thread headers and uses Claude Code and OpenCode session identifiers for prompt-cache affinity, improving cache reuse through the gateway.
+- Anthropic (Claude Pro/Max) logins now refresh the way Claude Code 2.1.332 does and are disabled only when Anthropic rejects the refresh token with `invalid_grant`; a failed background refresh no longer fails requests while the access token is still valid, and a 403 "OAuth token has been revoked" refreshes the same login before switching accounts.
+- Reduced CPU spent scanning streamed DeepSeek prose and long inline code spans that quote template tokens.
+
+### Fixed
+
+- Fixed generate_image edits through OpenAI-compatible gateways that rejected the documented JSON image-edit format.
+- Anthropic OAuth accounts explicitly rejected by an organization are now excluded from account rotation for seven days, including across sessions and restarts.
+- Fixed text-encoded tool calls from DeepSeek, Kimi K2, and Qwen models on OpenRouter Responses-compatible routes, allowing them to stream as normal tool calls instead of failing or triggering retries.
+- Fixed GitHub Copilot Gemini requests failing when MCP tool schemas contain union types such as ["string", "null"].
+- Reduced duplicate retries for openai-completions streams that receive an HTTP 500 response.
+- Fixed omp usage for Synthetic weekly-only plans so it displays weekly credit usage and the next regeneration time.
+- Fixed antigravity-cli quota exhaustion and unavailable-model handling so affected accounts are correctly rotated or blocked and reported reset times are honored.
+- Fixed Gemini models on OpenRouter losing reasoning during long tool-call loops.
+- Fixed prompt-cache misses for /btw and other side turns on OpenCode Go and Zen.
+- Fixed antigravity-cli losing conversation context during OAuth refreshes and when restoring saved turns after generation metadata compaction.
 
 ## [19.1.1] - 2026-11-23
 
@@ -2703,3 +2747,4 @@ Older entries are archived in [packages/ai/CHANGELOG.md@bdbb5c920f69](https://gi
 Older entries are archived in [packages/ai/CHANGELOG.md@cef4a452836c](https://github.com/can1357/oh-my-pi/blob/cef4a452836c7a8d547dd14470c34c9ed2dbb5f8/packages/ai/CHANGELOG.md).
 Older entries are archived in [packages/ai/CHANGELOG.md@80ad1d6b2eb3](https://github.com/can1357/oh-my-pi/blob/80ad1d6b2eb3dd916d863841dcae79f4f96c5612/packages/ai/CHANGELOG.md).
 Older entries are archived in [packages/ai/CHANGELOG.md@02eb912b7688](https://github.com/can1357/oh-my-pi/blob/02eb912b76887f1a06bc65e2352ef96742ec1067/packages/ai/CHANGELOG.md).
+Older entries are archived in [packages/ai/CHANGELOG.md@483bfd489943](https://github.com/can1357/oh-my-pi/blob/483bfd48994357938b5996cfabec020e388ee87b/packages/ai/CHANGELOG.md).
