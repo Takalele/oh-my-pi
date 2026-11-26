@@ -490,6 +490,12 @@ export function buildModel<TApi extends Api>(spec: ModelSpec<TApi>): Model<TApi>
 	};
 	applyCatalogAssignments(model, policy.catalog);
 	applyCatalogCorrections(model, policy.catalog);
+	if (spec.priorityLane !== undefined) {
+		// The lane bills under its own listed id's rules (cache-write rate,
+		// long-context tier, dated cards), as its standalone row did.
+		const { priorityLane: lane, requestModelId: _, ...standard } = spec;
+		model.priorityLane = { ...lane, cost: buildModel({ ...standard, id: lane.id, cost: lane.cost }).cost };
+	}
 	// Configured kinds and lifetimes replace catalog values rather than merging with them.
 	if (spec.kindConfig !== undefined) model.kind = spec.kindConfig;
 	if (spec.promptCacheConfig !== undefined) model.promptCache = { ...spec.promptCacheConfig };
