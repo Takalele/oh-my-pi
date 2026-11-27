@@ -26,6 +26,21 @@
 - Reduced idle CPU use on Windows after `/restart` ([#20518](https://github.com/can1357/oh-my-pi/pull/20518) by [@ethancawse](https://github.com/ethancawse)).
 - Reopened lost Tern surfaces on an `unknown surface` reply, stopped frames if the reopen was rejected, and kept recognizable broken TSP replies out of the editor ([#20550](https://github.com/can1357/oh-my-pi/issues/20550)).
 - Typing in a Tern composer keeps echoing while an agent streams, instead of stalling for seconds when Tern is slow to acknowledge frames. ([#20463](https://github.com/can1357/oh-my-pi/pull/20463) by [@Xytronix](https://github.com/Xytronix))
+- Improved performance when editing large documents and updating or closing views with many reactive values.
+- Fixed pane resizing in Herdr to avoid repeated redraw loops.
+- Fixed SIXEL and iTerm2 images overflowing rows, scrolling the terminal unexpectedly, or rendering incorrectly when they extend beyond the visible screen.
+- Fixed fast Vietnamese Telex input on Windows so characters are no longer dropped or duplicated.
+- Streaming code blocks now enter terminal scrollback as they move off screen, rather than waiting until the block is complete.
+- Reduced idle CPU usage on Windows after `/restart`.
+- Improved recovery from lost Tern surfaces and malformed TSP responses.
+- Typing in a Tern composer now remains responsive while an agent is streaming, even when Tern is slow to acknowledge frames.
+- Clicks in Tern now show their effect while Tern is slow to acknowledge frames: an ask form you submit leaves the screen at once instead of staying with a Submit button that no longer responds.
+- Fixed inverse video styling leaking into padding and borders at wrapped line endings.
+- Fixed win32 input-mode key records being inserted as literal composer text in certain timing conditions.
+- Fixed pastes on Windows Terminal arriving as raw `[Vk;Sc;Uc;…_` key records instead of the pasted text, CJK and line breaks included ([#20718](https://github.com/can1357/oh-my-pi/issues/20718))
+- Fixed SIXEL and iTerm2 images losing their bottom cell row in terminals that clear image cells on line erase, such as xterm.js ([#20752](https://github.com/can1357/oh-my-pi/issues/20752))
+- Fixed code blocks drawn with `codeIndent: 0` putting their ``` fence rows one column right of the code; fences now sit at column 0 with it, so copying the whole block yields its markdown ([#20752](https://github.com/can1357/oh-my-pi/issues/20752))
+- Stopped trusting an inherited `TERM_FEATURES` sync hint inside tmux/screen panes, which caused top-to-bottom redraw flashes while streaming in an inactive tmux 3.6 pane ([#20091](https://github.com/can1357/oh-my-pi/issues/20091))
 
 ## [19.2.1] - 2026-11-25
 
